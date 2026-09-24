@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "AB Santé",
+    "slug": "ab-sante-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "absante",
+    "userInterfaceStyle": "light",
+    "icon": "./assets/applogo.png",
+    "splash": {
+      "image": "./assets/appsplash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.absante.absante",
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "predictiveBackGestureEnabled": false,
+      "package": "com.absante.absante"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-web-browser"
+    ],
+    "experiments": {},
+    "runtimeVersion": "1.0.0",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f031efc8-2944-412b-ab42-c3c2e1c56003"
+      }
+    },
+    "owner": "mohamedhajjouji"
+  }
+}
