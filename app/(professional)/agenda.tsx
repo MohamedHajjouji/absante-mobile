@@ -117,14 +117,20 @@ export default function ProfessionalAgendaScreen() {
 
   const runStatus = async (appt: ProviderAppointment, status: string) => {
     setBusy(true);
-    const res = await updateAppointmentStatus(appt.id, status);
-    setBusy(false);
-    if (!res.success) {
-      Alert.alert('Erreur', res.error ?? 'Impossible de mettre à jour le rendez-vous.');
-      return;
+    try {
+      const res = await updateAppointmentStatus(appt.id, status);
+      if (!res.success) {
+        Alert.alert('Erreur', res.error ?? 'Impossible de mettre à jour le rendez-vous.');
+        return;
+      }
+      setSelected(null);
+      await load();
+    } catch (e) {
+      console.error('Failed to update appointment status:', e);
+      Alert.alert('Erreur', 'Impossible de mettre à jour. Vérifiez votre connexion.');
+    } finally {
+      setBusy(false);
     }
-    setSelected(null);
-    await load();
   };
 
   const now = new Date();
@@ -424,12 +430,17 @@ function CreateAppointmentModal({
 
   const loadOptions = useCallback(async () => {
     if (!providerId) return;
-    const [svcs, pats] = await Promise.all([
-      getProviderServices(providerId),
-      getProviderPatients(providerId),
-    ]);
-    setServices(svcs);
-    setPatients(pats);
+    try {
+      const [svcs, pats] = await Promise.all([
+        getProviderServices(providerId),
+        getProviderPatients(providerId),
+      ]);
+      setServices(svcs);
+      setPatients(pats);
+    } catch (e) {
+      console.error('Failed to load appointment options:', e);
+      setError("Impossible de charger les options. Vérifiez votre connexion.");
+    }
   }, [providerId]);
 
   useEffect(() => {
@@ -453,11 +464,6 @@ function CreateAppointmentModal({
       setError('Heure invalide — utilisez le format HH:MM (ex. 09:30).');
       return;
     }
-    const calendarId = await getPrimaryCalendar(providerId);
-    if (!calendarId) {
-      setError('Aucun calendrier de disponibilité trouvé.');
-      return;
-    }
     const service = services.find((s) => s.id === serviceId);
     const duration = service?.durationMinutes ?? 30;
     const start = new Date(`${date}T${time}`);
@@ -467,19 +473,31 @@ function CreateAppointmentModal({
     }
     const end = new Date(start.getTime() + duration * 60000);
     setSaving(true);
-    const res = await createAppointment({
-      providerId,
-      calendarId,
-      serviceId,
-      patientId,
-      startsAt: start.toISOString(),
-      endsAt: end.toISOString(),
-      notes: notes || undefined,
-    });
-    setSaving(false);
-    if (!res.success) {
-      setError(res.error ?? 'Impossible de créer le rendez-vous.');
+    try {
+      const calendarId = await getPrimaryCalendar(providerId);
+      if (!calendarId) {
+        setError('Aucun calendrier de disponibilité trouvé.');
+        return;
+      }
+      const res = await createAppointment({
+        providerId,
+        calendarId,
+        serviceId,
+        patientId,
+        startsAt: start.toISOString(),
+        endsAt: end.toISOString(),
+        notes: notes || undefined,
+      });
+      if (!res.success) {
+        setError(res.error ?? 'Impossible de créer le rendez-vous.');
+        return;
+      }
+    } catch (e) {
+      console.error('Failed to create appointment:', e);
+      setError("Impossible de créer le rendez-vous. Vérifiez votre connexion.");
       return;
+    } finally {
+      setSaving(false);
     }
     setServiceId(null);
     setPatientId(null);

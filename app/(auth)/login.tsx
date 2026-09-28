@@ -41,24 +41,34 @@ export default function LoginScreen() {
     if (!validate()) return;
 
     setLoading(true);
-    const { error } = await signIn({ email, password });
-    setLoading(false);
-
-    if (error) {
-      Alert.alert('Erreur', getFrenchErrorMessage(error.message));
+    try {
+      const { error } = await signIn({ email, password });
+      if (error) {
+        Alert.alert('Erreur', getFrenchErrorMessage(error.message));
+      }
+      // AuthContext will handle the redirect
+    } catch (e) {
+      console.error('Sign in failed:', e);
+      Alert.alert('Erreur', "Erreur de connexion. Vérifiez votre connexion internet");
+    } finally {
+      setLoading(false);
     }
-    // AuthContext will handle the redirect
   };
 
   const handleGoogle = async () => {
     setGoogleLoading(true);
-    const result = await signInWithGoogle();
-    setGoogleLoading(false);
-
-    if (!result.success && result.error) {
-      Alert.alert('Erreur', result.error);
+    try {
+      const result = await signInWithGoogle();
+      if (!result.success && result.error) {
+        Alert.alert('Erreur', result.error);
+      }
+      // AuthContext will handle the redirect
+    } catch (e) {
+      console.error('Google sign in failed:', e);
+      Alert.alert('Erreur', "Erreur de connexion. Vérifiez votre connexion internet");
+    } finally {
+      setGoogleLoading(false);
     }
-    // AuthContext will handle the redirect
   };
 
   const getFrenchErrorMessage = (message: string): string => {

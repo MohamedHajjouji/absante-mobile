@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -71,10 +71,15 @@ function generateDates(): { date: string; label: string; dayNum: string; dayName
 }
 
 export default function BookingScreen() {
-  const { providerId, serviceId: preServiceId } = useLocalSearchParams<{
+  const rawParams = useLocalSearchParams<{
     providerId: string;
     serviceId?: string;
   }>();
+  const rawProviderId = rawParams.providerId;
+  const rawPreService = rawParams.serviceId;
+  // Deep links can deliver params as arrays — normalize to single strings.
+  const providerId = Array.isArray(rawProviderId) ? rawProviderId[0] : rawProviderId;
+  const preServiceId = Array.isArray(rawPreService) ? rawPreService[0] : rawPreService;
   const router = useRouter();
   const { user } = useAuth();
 
@@ -93,12 +98,18 @@ export default function BookingScreen() {
   const [calendarId, setCalendarId] = useState<string | null>(null);
   const [userName, setUserName] = useState({ first: '', last: '', phone: '' });
   const [success, setSuccess] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const dates = useMemo(() => generateDates(), []);
 
-  useEffect(() => {
-    if (!providerId) return;
-    (async () => {
+  const load = useCallback(async () => {
+    if (!providerId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      setLoadError(false);
       const [detail, svcs, profile] = await Promise.all([
         getProviderDetail(providerId),
         getProviderServicesForBooking(providerId),
@@ -121,20 +132,34 @@ export default function BookingScreen() {
         const pre = svcs.find((s) => s.id === preServiceId);
         if (pre) setSelectedService(pre);
       }
-
+    } catch (e) {
+      console.error('Failed to load booking data:', e);
+      setLoadError(true);
+    } finally {
       setLoading(false);
-    })();
+    }
   }, [providerId, preServiceId, user?.id]);
 
   useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
     if (!selectedService || !providerId) return;
-    getCalendarForService(providerId, selectedService.id).then((cid) => {
-      setCalendarId(cid);
-    });
+    let active = true;
+    getCalendarForService(providerId, selectedService.id)
+      .then((cid) => {
+        if (active) setCalendarId(cid);
+      })
+      .catch((e) => console.error('Failed to load calendar:', e));
+    return () => {
+      active = false;
+    };
   }, [selectedService, providerId]);
 
   useEffect(() => {
     if (!calendarId || !selectedDate || !selectedService) return;
+    let active = true;
     setSlotsLoading(true);
     setSelectedSlot(null);
     getAvailableSlots(
@@ -142,10 +167,22 @@ export default function BookingScreen() {
       selectedDate,
       selectedService.durationMinutes,
       selectedService.bufferMinutes
-    ).then((s) => {
-      setSlots(s);
-      setSlotsLoading(false);
-    });
+    )
+      .then((s) => {
+        if (!active) return;
+        setSlots(s);
+        setSlotsLoading(false);
+      })
+      .catch((e) => {
+        console.error('Failed to load slots:', e);
+        if (active) {
+          setSlots([]);
+          setSlotsLoading(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
   }, [calendarId, selectedDate, selectedService]);
 
   const canGoNext = () => {
@@ -168,24 +205,30 @@ export default function BookingScreen() {
     if (!user?.id || !providerId || !selectedService || !calendarId || !selectedSlot) return;
 
     setSubmitting(true);
-    const result = await bookAppointment({
-      userId: user.id,
-      providerId,
-      serviceId: selectedService.id,
-      calendarId,
-      startsAt: selectedSlot.starts_at,
-      endsAt: selectedSlot.ends_at,
-      notes,
-      firstName: userName.first,
-      lastName: userName.last,
-      phone: userName.phone,
-    });
-    setSubmitting(false);
+    try {
+      const result = await bookAppointment({
+        userId: user.id,
+        providerId,
+        serviceId: selectedService.id,
+        calendarId,
+        startsAt: selectedSlot.starts_at,
+        endsAt: selectedSlot.ends_at,
+        notes,
+        firstName: userName.first,
+        lastName: userName.last,
+        phone: userName.phone,
+      });
 
-    if (result.success) {
-      setSuccess(true);
-    } else {
-      Alert.alert('Erreur', result.error || 'Impossible de prendre le rendez-vous.');
+      if (result.success) {
+        setSuccess(true);
+      } else {
+        Alert.alert('Erreur', result.error || 'Impossible de prendre le rendez-vous.');
+      }
+    } catch (e) {
+      console.error('Booking failed:', e);
+      Alert.alert('Erreur', 'Impossible de prendre le rendez-vous. Vérifiez votre connexion.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -193,6 +236,23 @@ export default function BookingScreen() {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-pageBg">
         <ActivityIndicator size="large" color="#F53E8A" />
+      </SafeAreaView>
+    );
+  }
+
+  if ((loadError || !providerId) && !success) {
+    return (
+      <SafeAreaView className="flex-1 items-center justify-center bg-pageBg px-8">
+        <Ionicons name="cloud-offline-outline" size={48} color="#F53E8A" />
+        <Text className="mt-4 text-base font-semibold text-dark">
+          Connexion impossible
+        </Text>
+        <Text className="mt-2 text-center text-sm text-grayText">
+          La réservation n'a pas pu être chargée. Vérifiez votre connexion.
+        </Text>
+        <TouchableOpacity onPress={load} className="mt-6 rounded-lg bg-primary px-6 py-3">
+          <Text className="text-sm font-medium text-white">Réessayer</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }

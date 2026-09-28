@@ -124,13 +124,19 @@ export default function ProfessionalHomeScreen() {
   const handleAvailability = async (value: boolean) => {
     if (!providerId) return;
     setToggling(true);
-    const res = await setAvailability(providerId, value);
-    setToggling(false);
-    if (!res.success) {
-      Alert.alert('Erreur', res.error ?? 'Impossible de mettre à jour la disponibilité.');
-      return;
+    try {
+      const res = await setAvailability(providerId, value);
+      if (!res.success) {
+        Alert.alert('Erreur', res.error ?? 'Impossible de mettre à jour la disponibilité.');
+        return;
+      }
+      if (profile) setProfile({ ...profile, acceptsNewPatients: value });
+    } catch (e) {
+      console.error('Failed to update availability:', e);
+      Alert.alert('Erreur', 'Impossible de mettre à jour. Vérifiez votre connexion.');
+    } finally {
+      setToggling(false);
     }
-    if (profile) setProfile({ ...profile, acceptsNewPatients: value });
   };
 
   // ── Derived data ──────────────────────────────────────────
@@ -183,7 +189,7 @@ export default function ProfessionalHomeScreen() {
     () => new Set((dashboard?.upcomingAppointments ?? []).map((a) => dayKey(new Date(a.startsAt)))),
     [dashboard]
   );
-  const upcomingCount = dashboard?.upcomingAppointments.length ?? 0;
+  const upcomingCount = (dashboard?.upcomingAppointments ?? []).length;
 
   const quickActions: {
     key: string;
@@ -365,7 +371,10 @@ export default function ProfessionalHomeScreen() {
               <View className="flex-row items-center gap-1 rounded-full bg-warning-50 px-2.5 py-1">
                 <Ionicons name="star" size={11} color="#F59E0B" />
                 <Text className="text-[11px] font-semibold text-warning">
-                  {profile.averageRating.toFixed(1)} ({profile.reviewCount})
+                  {(typeof profile.averageRating === 'number' && Number.isFinite(profile.averageRating)
+                    ? profile.averageRating
+                    : 0
+                  ).toFixed(1)} ({profile.reviewCount})
                 </Text>
               </View>
             )}
@@ -475,9 +484,19 @@ export default function ProfessionalHomeScreen() {
                   </TouchableOpacity>
                   {nextAppointment.patientPhone ? (
                     <TouchableOpacity
-                      onPress={() =>
-                        Linking.openURL(`tel:${nextAppointment.patientPhone}`)
-                      }
+                      onPress={() => {
+                        const phone = nextAppointment.patientPhone;
+                        if (!phone) return;
+                        Linking.canOpenURL(`tel:${phone}`)
+                          .then((supported) => {
+                            if (supported) return Linking.openURL(`tel:${phone}`);
+                            Alert.alert('Erreur', 'Appels non supportés sur cet appareil.');
+                          })
+                          .catch((e) => {
+                            console.error('Failed to place call:', e);
+                            Alert.alert('Erreur', 'Impossible de passer cet appel.');
+                          });
+                      }}
                       className="h-10 w-10 items-center justify-center rounded-full bg-white/20"
                       activeOpacity={0.85}
                       accessibilityRole="button"

@@ -24,41 +24,81 @@ if (!supabaseUrl || !supabaseAnonKey) {
 // Supabase client can still persist its session during SSR.
 const memoryStorage = new Map<string, string>();
 
+/** Corrupt stored values must never throw — a single bad entry would
+ *  otherwise break every Supabase call app-wide. */
+function safeParse(value: string | null): any {
+  if (!value) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    console.warn('[supabase] Ignoring corrupt stored session value.');
+    return null;
+  }
+}
+
 const secureStorage =
   Platform.OS === 'web'
     ? {
         getItem: async (key: string) => {
-          const value =
-            typeof localStorage !== 'undefined'
-              ? localStorage.getItem(key)
-              : memoryStorage.get(key) ?? null;
-          return value ? JSON.parse(value) : null;
+          try {
+            const value =
+              typeof localStorage !== 'undefined'
+                ? localStorage.getItem(key)
+                : memoryStorage.get(key) ?? null;
+            return safeParse(value);
+          } catch {
+            return safeParse(memoryStorage.get(key) ?? null);
+          }
         },
         setItem: async (key: string, value: string) => {
-          if (typeof localStorage !== 'undefined') {
-            localStorage.setItem(key, JSON.stringify(value));
-          } else {
+          try {
+            if (typeof localStorage !== 'undefined') {
+              localStorage.setItem(key, JSON.stringify(value));
+            } else {
+              memoryStorage.set(key, JSON.stringify(value));
+            }
+          } catch {
             memoryStorage.set(key, JSON.stringify(value));
           }
         },
         removeItem: async (key: string) => {
-          if (typeof localStorage !== 'undefined') {
-            localStorage.removeItem(key);
-          } else {
+          try {
+            if (typeof localStorage !== 'undefined') {
+              localStorage.removeItem(key);
+            } else {
+              memoryStorage.delete(key);
+            }
+          } catch {
             memoryStorage.delete(key);
           }
         },
       }
     : {
+        // SecureStore throws on devices with a broken keystore / locked
+        // hardware. Fall back to memory so auth calls degrade instead of
+        // crashing the app.
         getItem: async (key: string) => {
-          const value = await SecureStore.getItemAsync(key);
-          return value ? JSON.parse(value) : null;
+          try {
+            return safeParse(await SecureStore.getItemAsync(key));
+          } catch (e) {
+            console.warn('[supabase] SecureStore read failed, using memory.', e);
+            return safeParse(memoryStorage.get(key) ?? null);
+          }
         },
         setItem: async (key: string, value: string) => {
-          await SecureStore.setItemAsync(key, JSON.stringify(value));
+          try {
+            await SecureStore.setItemAsync(key, JSON.stringify(value));
+          } catch (e) {
+            console.warn('[supabase] SecureStore write failed, using memory.', e);
+            memoryStorage.set(key, JSON.stringify(value));
+          }
         },
         removeItem: async (key: string) => {
-          await SecureStore.deleteItemAsync(key);
+          try {
+            await SecureStore.deleteItemAsync(key);
+          } catch {
+            memoryStorage.delete(key);
+          }
         },
       };
 

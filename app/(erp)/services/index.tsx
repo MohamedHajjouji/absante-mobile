@@ -104,6 +104,7 @@ export default function ServicesCatalogScreen() {
       return;
     }
     setSaving(true);
+    try {
     const payload: Record<string, unknown> = {
       name: name.trim(),
       default_price: Number(String(price).replace(',', '.')) || null,
@@ -116,13 +117,18 @@ export default function ServicesCatalogScreen() {
     const res = editId
       ? await erpUpdate('services', editId, payload)
       : await erpInsert('services', payload);
-    setSaving(false);
     if (!res.ok) {
       Alert.alert('Erreur', res.message ?? "Impossible d'enregistrer le service.");
       return;
     }
     setFormOpen(false);
     load();
+    } catch (e) {
+      console.error('Failed to save ERP service:', e);
+      Alert.alert('Erreur', "Impossible d'enregistrer. Vérifiez votre connexion.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -250,11 +256,16 @@ export default function ServicesCatalogScreen() {
         {editId ? (
           <TouchableOpacity
             onPress={async () => {
-              const res = await erpDeactivate('services', editId);
-              if (!res.ok) Alert.alert('Erreur', res.message ?? 'Impossible de désactiver.');
-              else {
-                setFormOpen(false);
-                load();
+              try {
+                const res = await erpDeactivate('services', editId);
+                if (!res.ok) Alert.alert('Erreur', res.message ?? 'Impossible de désactiver.');
+                else {
+                  setFormOpen(false);
+                  load();
+                }
+              } catch (e) {
+                console.error('Failed to deactivate service:', e);
+                Alert.alert('Erreur', "Impossible de désactiver. Vérifiez votre connexion.");
               }
             }}
             className="mt-3 items-center rounded-lg border border-red-100 bg-red-50 py-3.5"

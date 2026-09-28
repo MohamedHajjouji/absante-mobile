@@ -71,14 +71,20 @@ export default function UnitsScreen() {
 
   const submit = async () => {
     setSaving(true);
-    const res = await saveUnit({ id: editId ?? undefined, name, symbol });
-    setSaving(false);
-    if (!res.ok) {
-      Alert.alert('Erreur', res.message ?? "Impossible d'enregistrer l'unité.");
-      return;
+    try {
+      const res = await saveUnit({ id: editId ?? undefined, name, symbol });
+      if (!res.ok) {
+        Alert.alert('Erreur', res.message ?? "Impossible d'enregistrer l'unité.");
+        return;
+      }
+      setFormOpen(false);
+      load();
+    } catch (e) {
+      console.error('Failed to save unit:', e);
+      Alert.alert('Erreur', "Impossible d'enregistrer. Vérifiez votre connexion.");
+    } finally {
+      setSaving(false);
     }
-    setFormOpen(false);
-    load();
   };
 
   const confirmDeactivate = (u: Unit) => {
@@ -88,13 +94,18 @@ export default function UnitsScreen() {
         text: 'Désactiver',
         style: 'destructive',
         onPress: async () => {
-          const res = await deactivateUnit(u.id);
-          if (!res.ok) {
-            Alert.alert('Erreur', res.message ?? "Impossible de désactiver l'unité.");
-            return;
+          try {
+            const res = await deactivateUnit(u.id);
+            if (!res.ok) {
+              Alert.alert('Erreur', res.message ?? "Impossible de désactiver l'unité.");
+              return;
+            }
+            setFormOpen(false);
+            load();
+          } catch (e) {
+            console.error('Failed to deactivate unit:', e);
+            Alert.alert('Erreur', "Impossible de désactiver. Vérifiez votre connexion.");
           }
-          setFormOpen(false);
-          load();
         },
       },
     ]);

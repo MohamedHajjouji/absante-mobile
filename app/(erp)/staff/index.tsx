@@ -93,6 +93,7 @@ export default function StaffScreen() {
       return;
     }
     setSaving(true);
+    try {
     const payload = {
       first_name: firstName.trim(),
       last_name: lastName.trim(),
@@ -103,13 +104,18 @@ export default function StaffScreen() {
     const res = editId
       ? await erpUpdate('staff_members', editId, payload)
       : await erpInsert('staff_members', payload);
-    setSaving(false);
     if (!res.ok) {
       Alert.alert('Erreur', res.message ?? "Impossible d'enregistrer le membre.");
       return;
     }
     setFormOpen(false);
     load();
+    } catch (e) {
+      console.error('Failed to save staff member:', e);
+      Alert.alert('Erreur', "Impossible d'enregistrer. Vérifiez votre connexion.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const confirmDeactivate = (m: StaffMember) => {
@@ -119,9 +125,14 @@ export default function StaffScreen() {
         text: 'Désactiver',
         style: 'destructive',
         onPress: async () => {
-          const res = await erpDeactivate('staff_members', m.id);
-          if (!res.ok) Alert.alert('Erreur', res.message ?? 'Impossible de désactiver.');
-          else load();
+          try {
+            const res = await erpDeactivate('staff_members', m.id);
+            if (!res.ok) Alert.alert('Erreur', res.message ?? 'Impossible de désactiver.');
+            else load();
+          } catch (e) {
+            console.error('Failed to deactivate staff member:', e);
+            Alert.alert('Erreur', "Impossible de désactiver. Vérifiez votre connexion.");
+          }
         },
       },
     ]);

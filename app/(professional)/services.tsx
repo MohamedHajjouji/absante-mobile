@@ -58,14 +58,19 @@ export default function ServicesScreen() {
   }, [load]);
 
   const handleToggle = async (id: string, current: boolean) => {
-    const res = await toggleProviderServiceActive(id, !current);
-    if (!res.success) {
-      Alert.alert('Erreur', res.error ?? 'Impossible de modifier le service.');
-      return;
+    try {
+      const res = await toggleProviderServiceActive(id, !current);
+      if (!res.success) {
+        Alert.alert('Erreur', res.error ?? 'Impossible de modifier le service.');
+        return;
+      }
+      setServices((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, active: !current } : s))
+      );
+    } catch (e) {
+      console.error('Failed to toggle service:', e);
+      Alert.alert('Erreur', 'Impossible de modifier le service. Vérifiez votre connexion.');
     }
-    setServices((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, active: !current } : s))
-    );
   };
 
   const handleDelete = (service: ProviderService) => {
@@ -78,12 +83,17 @@ export default function ServicesScreen() {
           text: 'Supprimer',
           style: 'destructive',
           onPress: async () => {
-            const res = await deleteProviderService(service.id);
-            if (!res.success) {
-              Alert.alert('Erreur', res.error ?? 'Impossible de supprimer le service.');
-              return;
+            try {
+              const res = await deleteProviderService(service.id);
+              if (!res.success) {
+                Alert.alert('Erreur', res.error ?? 'Impossible de supprimer le service.');
+                return;
+              }
+              setServices((prev) => prev.filter((s) => s.id !== service.id));
+            } catch (e) {
+              console.error('Failed to delete service:', e);
+              Alert.alert('Erreur', 'Impossible de supprimer. Vérifiez votre connexion.');
             }
-            setServices((prev) => prev.filter((s) => s.id !== service.id));
           },
         },
       ],
@@ -330,16 +340,22 @@ function ServiceFormModal({
     };
 
     setSaving(true);
-    const res = initial
-      ? await updateProviderService(initial.id, payload)
-      : await createProviderService(providerId, payload);
-    setSaving(false);
+    try {
+      const res = initial
+        ? await updateProviderService(initial.id, payload)
+        : await createProviderService(providerId, payload);
 
-    if (!res.success) {
-      setError(res.error ?? 'Impossible de sauvegarder le service.');
-      return;
+      if (!res.success) {
+        setError(res.error ?? 'Impossible de sauvegarder le service.');
+        return;
+      }
+      onSaved();
+    } catch (e) {
+      console.error('Failed to save service:', e);
+      setError("Impossible de sauvegarder. Vérifiez votre connexion.");
+    } finally {
+      setSaving(false);
     }
-    onSaved();
   };
 
 

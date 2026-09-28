@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,30 +34,66 @@ const SERVICE_TYPE_LABELS: Record<string, string> = {
 };
 
 export default function DoctorDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const rawParams = useLocalSearchParams<{ id: string }>();
+  const rawId = rawParams.id;
+  const id = Array.isArray(rawId) ? rawId[0] : rawId;
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [provider, setProvider] = useState<ProviderDetail | null>(null);
   const [services, setServices] = useState<ProviderServiceItem[]>([]);
 
-  useEffect(() => {
-    if (!id) return;
-    (async () => {
+  const load = useCallback(async () => {
+    if (!id) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      setLoadError(false);
       const [detail, svcs] = await Promise.all([
         getProviderDetail(id),
         getProviderServicesForBooking(id),
       ]);
       setProvider(detail);
       setServices(svcs);
+    } catch (e) {
+      console.error('Failed to load provider:', e);
+      setLoadError(true);
+    } finally {
       setLoading(false);
-    })();
+    }
   }, [id]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   if (loading) {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-pageBg">
         <ActivityIndicator size="large" color="#F53E8A" />
+      </SafeAreaView>
+    );
+  }
+
+  if (loadError && !provider) {
+    return (
+      <SafeAreaView className="flex-1 items-center justify-center bg-pageBg px-8">
+        <Ionicons name="cloud-offline-outline" size={48} color="#F53E8A" />
+        <Text className="mt-4 text-base font-semibold text-dark">
+          Connexion impossible
+        </Text>
+        <Text className="mt-2 text-center text-sm text-grayText">
+          Le profil du médecin n'a pas pu être chargé.
+        </Text>
+        <TouchableOpacity
+          onPress={load}
+          className="mt-6 rounded-lg bg-primary px-6 py-3"
+        >
+          <Text className="text-sm font-medium text-white">Réessayer</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }
@@ -131,7 +167,10 @@ export default function DoctorDetailScreen() {
           <View className="flex-1 items-center rounded-panel border border-hairline bg-white p-4 shadow-panel">
             <Ionicons name="star" size={20} color="#F59E0B" />
             <Text className="mt-1.5 text-lg font-semibold text-dark">
-              {provider.rating.toFixed(1)}
+              {(typeof provider.rating === 'number' && Number.isFinite(provider.rating)
+                ? provider.rating
+                : 0
+              ).toFixed(1)}
             </Text>
             <Text className="text-xs text-grayText">
               {provider.reviewCount} avis
@@ -166,12 +205,12 @@ export default function DoctorDetailScreen() {
         ) : null}
 
         {/* Facilities */}
-        {provider.facilities.length > 0 ? (
+        {(provider.facilities ?? []).length > 0 ? (
           <View className="mx-5 mt-6">
             <Text className="text-[18px] font-medium tracking-[-0.3px] text-dark">
               Lieux de consultation
             </Text>
-            {provider.facilities.map((f) => (
+            {((provider.facilities ?? [])).map((f) => (
               <View
                 key={f.id}
                 className="mt-3 flex-row items-center rounded-panel border border-hairline bg-white p-4"

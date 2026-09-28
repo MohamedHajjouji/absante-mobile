@@ -39,17 +39,27 @@ export default function ProfileScreen() {
   const [editLast, setEditLast] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const loadData = useCallback(async () => {
-    if (!user?.id) return;
-    const [p, patient] = await Promise.all([
-      getUserProfile(user.id),
-      getPatientByProfileId(user.id),
-    ]);
-    setProfile(p);
-    if (patient) setStats(await getPatientStats(patient.id));
-    setLoading(false);
-    setRefreshing(false);
+    // Any throw (offline, DNS, backend unreachable) must still clear the
+    // spinner — otherwise the tab freezes on a loader that looks like a crash.
+    try {
+      setLoadError(false);
+      if (!user?.id) return;
+      const [p, patient] = await Promise.all([
+        getUserProfile(user.id),
+        getPatientByProfileId(user.id),
+      ]);
+      setProfile(p);
+      if (patient) setStats(await getPatientStats(patient.id));
+    } catch (e) {
+      console.error('Failed to load profile:', e);
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, [user]);
 
   useEffect(() => { loadData(); }, [loadData]);
@@ -58,7 +68,21 @@ export default function ProfileScreen() {
   const handleSignOut = () => {
     Alert.alert('Se déconnecter', 'Voulez-vous vraiment vous déconnecter ?', [
       { text: 'Annuler', style: 'cancel' },
-      { text: 'Se déconnecter', style: 'destructive', onPress: async () => { setSigningOut(true); await signOut(); } },
+      {
+        text: 'Se déconnecter',
+        style: 'destructive',
+        onPress: async () => {
+          setSigningOut(true);
+          try {
+            await signOut();
+          } catch (e) {
+            console.error('Sign out failed:', e);
+            Alert.alert('Erreur', 'La déconnexion a échoué. Réessayez.');
+          } finally {
+            setSigningOut(false);
+          }
+        },
+      },
     ]);
   };
 
@@ -74,9 +98,15 @@ export default function ProfileScreen() {
     if (!user?.id) return;
     if (!editFirst.trim() || !editLast.trim()) { Alert.alert('Erreur', 'Le nom et le prénom sont obligatoires.'); return; }
     setSaving(true);
-    const result = await updateUserProfile(user.id, { firstName: editFirst.trim(), lastName: editLast.trim(), phone: editPhone.trim() });
-    setSaving(false);
-    if (result.success) { setEditModal(false); loadData(); } else { Alert.alert('Erreur', result.error || 'Impossible de sauvegarder.'); }
+    try {
+      const result = await updateUserProfile(user.id, { firstName: editFirst.trim(), lastName: editLast.trim(), phone: editPhone.trim() });
+      if (result.success) { setEditModal(false); loadData(); } else { Alert.alert('Erreur', result.error || 'Impossible de sauvegarder.'); }
+    } catch (e) {
+      console.error('Failed to save profile:', e);
+      Alert.alert('Erreur', 'Impossible de sauvegarder. Vérifiez votre connexion.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const menuItems = [
@@ -96,6 +126,27 @@ export default function ProfileScreen() {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-pageBg" edges={['top']}>
         <ActivityIndicator size="large" color="#F53E8A" />
+      </SafeAreaView>
+    );
+  }
+
+  if (loadError && !profile) {
+    return (
+      <SafeAreaView className="flex-1 items-center justify-center bg-pageBg px-8" edges={['top']}>
+        <View className="h-20 w-20 items-center justify-center rounded-full bg-primary-50">
+          <Ionicons name="cloud-offline-outline" size={36} color="#F53E8A" />
+        </View>
+        <Text className="mt-6 text-lg font-semibold text-dark">Connexion impossible</Text>
+        <Text className="mt-2 text-center text-sm font-medium leading-6 text-grayText">
+          Votre profil n'a pas pu être chargé. Vérifiez votre connexion puis réessayez.
+        </Text>
+        <TouchableOpacity
+          onPress={() => { setLoading(true); loadData(); }}
+          className="mt-6 rounded-full bg-primary px-8 py-3"
+          activeOpacity={0.85}
+        >
+          <Text className="text-sm font-semibold text-white">Réessayer</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }

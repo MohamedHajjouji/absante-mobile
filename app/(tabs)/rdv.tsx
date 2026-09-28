@@ -65,14 +65,19 @@ function ReviewSection({
   useEffect(() => {
     let active = true;
     (async () => {
-      const review = await getReviewForAppointment(appointmentId);
-      if (!active) return;
-      setExisting(review);
-      if (review) {
-        setRating(review.rating);
-        setComment(review.comment ?? '');
+      try {
+        const review = await getReviewForAppointment(appointmentId);
+        if (!active) return;
+        setExisting(review);
+        if (review) {
+          setRating(review.rating);
+          setComment(review.comment ?? '');
+        }
+      } catch (e) {
+        console.error('Failed to load review:', e);
+      } finally {
+        if (active) setLoading(false);
       }
-      setLoading(false);
     })();
     return () => {
       active = false;
@@ -110,18 +115,24 @@ function ReviewSection({
 
   const handleSubmit = async () => {
     setSaving(true);
-    const result = await submitReview({
-      appointmentId,
-      providerId,
-      patientId,
-      rating,
-      comment,
-    });
-    setSaving(false);
-    if (result.success) {
-      setExisting({ id: 'new', rating, comment: comment.trim() || null });
-    } else {
-      Alert.alert('Erreur', result.error || "Impossible d'envoyer votre avis.");
+    try {
+      const result = await submitReview({
+        appointmentId,
+        providerId,
+        patientId,
+        rating,
+        comment,
+      });
+      if (result.success) {
+        setExisting({ id: 'new', rating, comment: comment.trim() || null });
+      } else {
+        Alert.alert('Erreur', result.error || "Impossible d'envoyer votre avis.");
+      }
+    } catch (e) {
+      console.error('Failed to submit review:', e);
+      Alert.alert('Erreur', "Impossible d'envoyer votre avis. Vérifiez votre connexion.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -172,15 +183,25 @@ export default function AppointmentsScreen() {
   const [patientId, setPatientId] = useState<string | null>(null);
   const [selected, setSelected] = useState<PatientAppointment | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const loadAppointments = useCallback(async () => {
-    if (!user?.id) { setLoading(false); setRefreshing(false); return; }
-    const patient = await getPatientByProfileId(user.id);
-    if (!patient) { setLoading(false); setRefreshing(false); return; }
-    setPatientId(patient.id);
-    setAppointments(await getMyAppointments(patient.id));
-    setLoading(false);
-    setRefreshing(false);
+    // Any throw (offline, DNS, backend unreachable) must still clear the
+    // spinner — otherwise the tab freezes on a loader that looks like a crash.
+    try {
+      setLoadError(false);
+      if (!user?.id) return;
+      const patient = await getPatientByProfileId(user.id);
+      if (!patient) return;
+      setPatientId(patient.id);
+      setAppointments(await getMyAppointments(patient.id));
+    } catch (e) {
+      console.error('Failed to load appointments:', e);
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, [user]);
 
   useEffect(() => { loadAppointments(); }, [loadAppointments]);
@@ -200,13 +221,19 @@ export default function AppointmentsScreen() {
         text: 'Oui, annuler', style: 'destructive',
         onPress: async () => {
           setBusy(true);
-          const result = await cancelAppointment(appt.id, patientId);
-          setBusy(false);
-          if (result.success) {
-            setSelected(null);
-            setAppointments((prev) => prev.map((a) => a.id === appt.id ? { ...a, status: 'cancelled' } : a));
-          } else {
-            Alert.alert('Erreur', result.error || "Impossible d'annuler.");
+          try {
+            const result = await cancelAppointment(appt.id, patientId);
+            if (result.success) {
+              setSelected(null);
+              setAppointments((prev) => prev.map((a) => a.id === appt.id ? { ...a, status: 'cancelled' } : a));
+            } else {
+              Alert.alert('Erreur', result.error || "Impossible d'annuler.");
+            }
+          } catch (e) {
+            console.error('Failed to cancel appointment:', e);
+            Alert.alert('Erreur', "Impossible d'annuler. Vérifiez votre connexion.");
+          } finally {
+            setBusy(false);
           }
         },
       },
@@ -222,6 +249,27 @@ export default function AppointmentsScreen() {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-pageBg" edges={['top']}>
         <ActivityIndicator size="large" color="#F53E8A" />
+      </SafeAreaView>
+    );
+  }
+
+  if (loadError && appointments.length === 0) {
+    return (
+      <SafeAreaView className="flex-1 items-center justify-center bg-pageBg px-8" edges={['top']}>
+        <View className="h-20 w-20 items-center justify-center rounded-full bg-primary-50">
+          <Ionicons name="cloud-offline-outline" size={36} color="#F53E8A" />
+        </View>
+        <Text className="mt-6 text-lg font-semibold text-dark">Connexion impossible</Text>
+        <Text className="mt-2 text-center text-sm font-medium leading-6 text-grayText">
+          Vos rendez-vous n'ont pas pu être chargés. Vérifiez votre connexion puis réessayez.
+        </Text>
+        <TouchableOpacity
+          onPress={() => { setLoading(true); loadAppointments(); }}
+          className="mt-6 rounded-full bg-primary px-8 py-3"
+          activeOpacity={0.85}
+        >
+          <Text className="text-sm font-semibold text-white">Réessayer</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }

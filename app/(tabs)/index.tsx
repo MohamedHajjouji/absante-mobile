@@ -83,39 +83,46 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const loadData = useCallback(async () => {
-    // Public content loads for everyone (guests included).
-    const [profs, providers] = await Promise.all([
-      getProfessions(),
-      searchProviders({ limit: 8 }),
-    ]);
-    setProfessions(profs);
-    setPopular(providers);
-
-    // Personal content requires a session.
-    if (user?.id) {
-      const [p, unread] = await Promise.all([
-        getUserProfile(user.id),
-        getUnreadNotificationCount(user.id),
+    try {
+      // Public content loads for everyone (guests included).
+      const [profs, providers] = await Promise.all([
+        getProfessions(),
+        searchProviders({ limit: 8 }),
       ]);
-      setProfile(p);
-      setUnreadCount(unread);
+      setProfessions(profs);
+      setPopular(providers);
 
-      const patient = await getPatientByProfileId(user.id);
-      if (patient) {
-        const [next, s] = await Promise.all([
-          getNextAppointment(patient.id),
-          getPatientStats(patient.id),
+      // Personal content requires a session.
+      if (user?.id) {
+        const [p, unread] = await Promise.all([
+          getUserProfile(user.id),
+          getUnreadNotificationCount(user.id),
         ]);
-        setNextAppt(next);
-        setStats(s);
+        setProfile(p);
+        setUnreadCount(unread);
+
+        const patient = await getPatientByProfileId(user.id);
+        if (patient) {
+          const [next, s] = await Promise.all([
+            getNextAppointment(patient.id),
+            getPatientStats(patient.id),
+          ]);
+          setNextAppt(next);
+          setStats(s);
+        }
+      } else {
+        setProfile(null);
+        setNextAppt(null);
+        setUnreadCount(0);
+        setStats({ appointmentCount: 0, doctorCount: 0 });
       }
-    } else {
-      setProfile(null);
-      setNextAppt(null);
-      setUnreadCount(0);
-      setStats({ appointmentCount: 0, doctorCount: 0 });
+    } catch (e) {
+      // Offline / backend unreachable: keep whatever is on screen instead of
+      // leaving pull-to-refresh stuck. Individual screens show retry UI.
+      console.error('Failed to load home data:', e);
+    } finally {
+      setRefreshing(false);
     }
-    setRefreshing(false);
   }, [user]);
 
   useFocusEffect(

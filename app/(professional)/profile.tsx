@@ -83,13 +83,19 @@ export default function ProfessionalProfileScreen() {
   const handleAvailability = async (value: boolean) => {
     if (!profile) return;
     setToggling(true);
-    const res = await setAvailability(profile.id, value);
-    setToggling(false);
-    if (!res.success) {
-      Alert.alert('Erreur', res.error ?? 'Impossible de mettre à jour la disponibilité.');
-      return;
+    try {
+      const res = await setAvailability(profile.id, value);
+      if (!res.success) {
+        Alert.alert('Erreur', res.error ?? 'Impossible de mettre à jour la disponibilité.');
+        return;
+      }
+      setProfile({ ...profile, acceptsNewPatients: value });
+    } catch (e) {
+      console.error('Failed to update availability:', e);
+      Alert.alert('Erreur', 'Impossible de mettre à jour. Vérifiez votre connexion.');
+    } finally {
+      setToggling(false);
     }
-    setProfile({ ...profile, acceptsNewPatients: value });
   };
 
   const handleSignOut = () => {
@@ -103,8 +109,15 @@ export default function ProfessionalProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             setSigningOut(true);
-            const { error } = await signOut();
-            if (error) {
+            try {
+              const { error } = await signOut();
+              if (error) {
+                Alert.alert('Erreur', 'Impossible de se déconnecter. Veuillez réessayer.');
+                setSigningOut(false);
+              }
+              // On success AuthContext redirects and this screen unmounts.
+            } catch (e) {
+              console.error('Sign out failed:', e);
               Alert.alert('Erreur', 'Impossible de se déconnecter. Veuillez réessayer.');
               setSigningOut(false);
             }
@@ -400,21 +413,27 @@ function EditProfileModal({
     }
 
     setSaving(true);
-    const res = await updateProviderProfile(userId, {
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      phone: phone.trim(),
-      biography: biography.trim() || null,
-      yearsOfExperience: yearsNum,
-      licenseNumber: license.trim() || null,
-    });
-    setSaving(false);
+    try {
+      const res = await updateProviderProfile(userId, {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        phone: phone.trim(),
+        biography: biography.trim() || null,
+        yearsOfExperience: yearsNum,
+        licenseNumber: license.trim() || null,
+      });
 
-    if (!res.success) {
-      setError(res.error ?? 'Impossible de sauvegarder vos modifications.');
-      return;
+      if (!res.success) {
+        setError(res.error ?? 'Impossible de sauvegarder vos modifications.');
+        return;
+      }
+      onSaved();
+    } catch (e) {
+      console.error('Failed to save provider profile:', e);
+      setError("Impossible de sauvegarder. Vérifiez votre connexion.");
+    } finally {
+      setSaving(false);
     }
-    onSaved();
   };
 
   return (

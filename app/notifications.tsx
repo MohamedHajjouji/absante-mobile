@@ -83,19 +83,28 @@ export default function NotificationsScreen() {
 
   const handleOpen = async (n: AppNotification) => {
     if (!n.read) {
-      await markNotificationRead(n.id);
-      setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
+      try {
+        await markNotificationRead(n.id);
+        setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
+      } catch (e) {
+        console.error('Failed to mark notification read:', e);
+      }
     }
   };
 
   const handleMarkAll = async () => {
     if (!user?.id || unreadCount === 0) return;
-    const res = await markAllNotificationsRead(user.id);
-    if (!res.success) {
-      Alert.alert('Erreur', res.error ?? 'Impossible de marquer les notifications comme lues.');
-      return;
+    try {
+      const res = await markAllNotificationsRead(user.id);
+      if (!res.success) {
+        Alert.alert('Erreur', res.error ?? 'Impossible de marquer les notifications comme lues.');
+        return;
+      }
+      setItems((prev) => prev.map((x) => ({ ...x, read: true })));
+    } catch (e) {
+      console.error('Failed to mark all notifications read:', e);
+      Alert.alert('Erreur', 'Impossible de marquer les notifications comme lues. Vérifiez votre connexion.');
     }
-    setItems((prev) => prev.map((x) => ({ ...x, read: true })));
   };
 
   // Group into Aujourd'hui / Hier / Plus tôt

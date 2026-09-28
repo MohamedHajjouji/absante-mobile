@@ -68,14 +68,20 @@ export default function LocationsScreen() {
 
   const submit = async () => {
     setSaving(true);
-    const res = await saveLocation({ id: editId ?? undefined, name, location_type: locationType });
-    setSaving(false);
-    if (!res.ok) {
-      Alert.alert('Erreur', res.message ?? "Impossible d'enregistrer l'emplacement.");
-      return;
+    try {
+      const res = await saveLocation({ id: editId ?? undefined, name, location_type: locationType });
+      if (!res.ok) {
+        Alert.alert('Erreur', res.message ?? "Impossible d'enregistrer l'emplacement.");
+        return;
+      }
+      setFormOpen(false);
+      load();
+    } catch (e) {
+      console.error('Failed to save location:', e);
+      Alert.alert('Erreur', "Impossible d'enregistrer. Vérifiez votre connexion.");
+    } finally {
+      setSaving(false);
     }
-    setFormOpen(false);
-    load();
   };
 
   const confirmDeactivate = (l: ErpLocation) => {
@@ -85,13 +91,18 @@ export default function LocationsScreen() {
         text: 'Désactiver',
         style: 'destructive',
         onPress: async () => {
-          const res = await deactivateLocation(l.id);
-          if (!res.ok) {
-            Alert.alert('Erreur', res.message ?? "Impossible de désactiver l'emplacement.");
-            return;
+          try {
+            const res = await deactivateLocation(l.id);
+            if (!res.ok) {
+              Alert.alert('Erreur', res.message ?? "Impossible de désactiver l'emplacement.");
+              return;
+            }
+            setFormOpen(false);
+            load();
+          } catch (e) {
+            console.error('Failed to deactivate location:', e);
+            Alert.alert('Erreur', "Impossible de désactiver. Vérifiez votre connexion.");
           }
-          setFormOpen(false);
-          load();
         },
       },
     ]);

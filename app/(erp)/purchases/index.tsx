@@ -214,6 +214,7 @@ export default function PurchasesScreen() {
       return;
     }
     setSaving(true);
+    try {
     const payload = {
       name: name.trim(),
       phone: phone.trim() || null,
@@ -223,13 +224,18 @@ export default function PurchasesScreen() {
     const res = editId
       ? await erpUpdate('suppliers', editId, payload)
       : await erpInsert('suppliers', payload);
-    setSaving(false);
     if (!res.ok) {
       Alert.alert('Erreur', res.message ?? "Impossible d'enregistrer le fournisseur.");
       return;
     }
     setFormOpen(false);
     load();
+    } catch (e) {
+      console.error('Failed to save supplier:', e);
+      Alert.alert('Erreur', "Impossible d'enregistrer. Vérifiez votre connexion.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const confirmDeactivate = (s: Supplier) => {
@@ -239,9 +245,14 @@ export default function PurchasesScreen() {
         text: 'Désactiver',
         style: 'destructive',
         onPress: async () => {
-          const res = await erpDeactivate('suppliers', s.id);
-          if (!res.ok) Alert.alert('Erreur', res.message ?? 'Impossible de désactiver.');
-          else load();
+          try {
+            const res = await erpDeactivate('suppliers', s.id);
+            if (!res.ok) Alert.alert('Erreur', res.message ?? 'Impossible de désactiver.');
+            else load();
+          } catch (e) {
+            console.error('Failed to deactivate supplier:', e);
+            Alert.alert('Erreur', "Impossible de désactiver. Vérifiez votre connexion.");
+          }
         },
       },
     ]);
@@ -273,6 +284,9 @@ export default function PurchasesScreen() {
       setEditorHeader(h);
       setEditorLines(rows.map(itemRowToLine));
       setEditorOpen(true);
+    } catch (e) {
+      console.error('Failed to load purchase lines:', e);
+      Alert.alert('Erreur', "Commande illisible. Vérifiez votre connexion.");
     } finally {
       setActing(false);
     }
@@ -323,6 +337,9 @@ export default function PurchasesScreen() {
       }
       setEditorOpen(false);
       load();
+    } catch (e) {
+      console.error('Failed to save purchase:', e);
+      Alert.alert('Erreur', "Enregistrement impossible. Vérifiez votre connexion.");
     } finally {
       setEditorSaving(false);
     }
@@ -334,6 +351,9 @@ export default function PurchasesScreen() {
       const res = await fn();
       if (!res.ok) Alert.alert('Erreur', res.message ?? 'Action impossible.');
       else load();
+    } catch (e) {
+      console.error('ERP action failed:', e);
+      Alert.alert('Erreur', "Action impossible. Vérifiez votre connexion.");
     } finally {
       setActing(false);
     }

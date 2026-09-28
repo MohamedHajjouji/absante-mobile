@@ -32,13 +32,18 @@ export default function ForgotPasswordScreen() {
     if (!validate()) return;
 
     setLoading(true);
-    const result = await resetPassword(email);
-    setLoading(false);
-
-    if (result.error) {
-      setError(getFrenchErrorMessage(result.error.message));
-    } else {
-      setSent(true);
+    try {
+      const result = await resetPassword(email);
+      if (result.error) {
+        setError(getFrenchErrorMessage(result.error.message));
+      } else {
+        setSent(true);
+      }
+    } catch (e) {
+      console.error('Password reset failed:', e);
+      setError("Erreur de connexion. Vérifiez votre connexion internet");
+    } finally {
+      setLoading(false);
     }
   };
 

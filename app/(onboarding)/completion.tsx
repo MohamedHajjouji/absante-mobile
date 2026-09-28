@@ -13,15 +13,23 @@ export default function OnboardingCompletionScreen() {
   const handleContinue = async () => {
     if (loading) return;
     setLoading(true);
-    // Re-run profile detection so routing picks the right shell for this
-    // user's role without requiring a full app restart.
-    const role = await refreshProfile();
-    if (role === 'professional') {
-      router.replace('/(professional)');
-    } else {
+    try {
+      // Re-run profile detection so routing picks the right shell for this
+      // user's role without requiring a full app restart.
+      const role = await refreshProfile();
+      if (role === 'professional') {
+        router.replace('/(professional)');
+      } else {
+        router.replace('/(tabs)');
+      }
+    } catch (e) {
+      // Offline / backend unreachable: fall through to the default shell
+      // instead of sticking on a spinner — tabs will show retry UI if needed.
+      console.error('Profile refresh failed, continuing to tabs:', e);
       router.replace('/(tabs)');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (

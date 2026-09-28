@@ -54,11 +54,13 @@ function specialtyIcon(name: string): IonIconName {
   return hit ? hit[1] : "medkit";
 }
 
-function RatingBadge({ rating, count }: { rating: number; count: number }) {
+function RatingBadge({ rating, count }: { rating: number | null | undefined; count: number }) {
+  // New providers may have no reviews yet — rating can be null.
+  const safe = typeof rating === 'number' && Number.isFinite(rating) ? rating : 0;
   return (
     <View className="flex-row items-center gap-1">
       <Ionicons name="star" size={12} color="#F59E0B" />
-      <Text className="text-xs font-semibold text-dark">{rating.toFixed(1)}</Text>
+      <Text className="text-xs font-semibold text-dark">{safe.toFixed(1)}</Text>
       <Text className="text-xs text-grayText">({count})</Text>
     </View>
   );
@@ -73,14 +75,34 @@ export default function SearchScreen() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
-  useEffect(() => { getProfessions().then((p) => setProfessions(p)); }, []);
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const p = await getProfessions();
+        if (active) setProfessions(p);
+      } catch (e) {
+        console.error('Failed to load professions:', e);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const doSearch = useCallback(async (q: string, profId: string | null) => {
     setLoading(true);
     setSearched(true);
-    const data = await searchProviders({ query: q || undefined, professionId: profId || undefined });
-    setResults(data);
-    setLoading(false);
+    try {
+      const data = await searchProviders({ query: q || undefined, professionId: profId || undefined });
+      setResults(data);
+    } catch (e) {
+      // Offline / backend unreachable: show empty state, never stick the loader.
+      console.error('Search failed:', e);
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {

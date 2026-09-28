@@ -238,6 +238,7 @@ export default function ProductsScreen() {
     }
 
     setSaving(true);
+    try {
     const units = form.editingUnits.map((u) => ({
       id: u.id ?? undefined,
       unit_id: u.unitId ?? undefined,
@@ -258,13 +259,18 @@ export default function ProductsScreen() {
       is_rentable: form.isRentable,
       units,
     });
-    setSaving(false);
     if (!res.ok) {
       Alert.alert('Erreur', res.message ?? "Impossible d'enregistrer le produit.");
       return;
     }
     setFormOpen(false);
     load();
+    } catch (e) {
+      console.error('Failed to save product:', e);
+      Alert.alert('Erreur', "Impossible d'enregistrer. Vérifiez votre connexion.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const confirmDeactivate = (p: ErpProductRow) => {
@@ -274,13 +280,18 @@ export default function ProductsScreen() {
         text: 'Désactiver',
         style: 'destructive',
         onPress: async () => {
-          const res = await erpDeactivate('products', p.id);
-          if (!res.ok) {
-            Alert.alert('Erreur', res.message ?? 'Impossible de désactiver le produit.');
-            return;
+          try {
+            const res = await erpDeactivate('products', p.id);
+            if (!res.ok) {
+              Alert.alert('Erreur', res.message ?? 'Impossible de désactiver le produit.');
+              return;
+            }
+            setFormOpen(false);
+            load();
+          } catch (e) {
+            console.error('Failed to deactivate product:', e);
+            Alert.alert('Erreur', "Impossible de désactiver. Vérifiez votre connexion.");
           }
-          setFormOpen(false);
-          load();
         },
       },
     ]);
@@ -308,7 +319,7 @@ export default function ProductsScreen() {
 
   const openAdjustStock = (p: ErpProductRow) => {
     // Default to first product unit and first location
-    const firstUnit = p.product_units[0];
+    const firstUnit = (p.product_units ?? [])[0];
     setAdjustStockProduct(p);
     setAdjustStockForm({
       productUnitId: firstUnit?.id || '',
@@ -333,6 +344,7 @@ export default function ProductsScreen() {
       return;
     }
     setAdjustStockSaving(true);
+    try {
     const res = await recordMovement({
       productId: adjustStockProduct.id,
       productUnitId: adjustStockForm.productUnitId,
@@ -343,7 +355,6 @@ export default function ProductsScreen() {
       notes: adjustStockForm.notes || null,
       createdBy: null,
     });
-    setAdjustStockSaving(false);
     if (!res.ok) {
       Alert.alert('Erreur', res.message ?? "Impossible d'ajuster le stock.");
       return;
@@ -351,12 +362,19 @@ export default function ProductsScreen() {
     setAdjustStockSheetOpen(false);
     setAdjustStockProduct(null);
     load();
+    } catch (e) {
+      console.error('Failed to record movement:', e);
+      Alert.alert('Erreur', "Impossible d'ajuster le stock. Vérifiez votre connexion.");
+    } finally {
+      setAdjustStockSaving(false);
+    }
   };
 
   const categoryOptions: ErpOption[] = categories.map((c) => ({ value: c.id, label: c.name }));
 
   const defaultPriceOf = (p: ErpProductRow): string | null => {
-    const defUnit = p.product_units.find((u) => u.is_default) ?? p.product_units[0];
+    const units = p.product_units ?? [];
+    const defUnit = units.find((u) => u.is_default) ?? units[0];
     return defUnit?.selling_price != null ? formatMAD(defUnit.selling_price) : null;
   };
 

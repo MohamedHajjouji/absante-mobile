@@ -60,9 +60,11 @@ export default function MovementsScreen() {
   // user has filled in the whole form.
   useEffect(() => {
     let active = true;
-    isMovementRpcAvailable().then((ok) => {
-      if (active) setRpcReady(ok);
-    });
+    isMovementRpcAvailable()
+      .then((ok) => {
+        if (active) setRpcReady(ok);
+      })
+      .catch((e) => console.error('RPC availability probe failed:', e));
     return () => {
       active = false;
     };
@@ -76,9 +78,14 @@ export default function MovementsScreen() {
   const loadMore = useCallback(async () => {
     if (loadingMore || rows.length >= total) return;
     setLoadingMore(true);
-    const { data } = await fetchPage(rows.length);
-    setRows((prev) => [...prev, ...data]);
-    setLoadingMore(false);
+    try {
+      const { data } = await fetchPage(rows.length);
+      setRows((prev) => [...prev, ...data]);
+    } catch (e) {
+      console.error('Failed to load more movements:', e);
+    } finally {
+      setLoadingMore(false);
+    }
   }, [fetchPage, loadingMore, rows.length, total]);
 
   const chipOptions: ErpChipOption[] = [

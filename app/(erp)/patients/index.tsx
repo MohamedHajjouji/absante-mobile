@@ -90,6 +90,7 @@ export default function PatientsScreen() {
       return;
     }
     setSaving(true);
+    try {
     const payload = {
       first_name: firstName.trim(),
       last_name: lastName.trim(),
@@ -100,13 +101,18 @@ export default function PatientsScreen() {
     const res = editId
       ? await erpUpdate('erp_patients', editId, payload)
       : await erpInsert('erp_patients', payload);
-    setSaving(false);
     if (!res.ok) {
       Alert.alert('Erreur', res.message ?? "Impossible d'enregistrer le patient.");
       return;
     }
     setFormOpen(false);
     load();
+    } catch (e) {
+      console.error('Failed to save ERP patient:', e);
+      Alert.alert('Erreur', "Impossible d'enregistrer. Vérifiez votre connexion.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const confirmDeactivate = (p: ErpPatient) => {
@@ -116,9 +122,14 @@ export default function PatientsScreen() {
         text: 'Désactiver',
         style: 'destructive',
         onPress: async () => {
-          const res = await erpDeactivate('erp_patients', p.id);
-          if (!res.ok) Alert.alert('Erreur', res.message ?? 'Impossible de désactiver.');
-          else load();
+          try {
+            const res = await erpDeactivate('erp_patients', p.id);
+            if (!res.ok) Alert.alert('Erreur', res.message ?? 'Impossible de désactiver.');
+            else load();
+          } catch (e) {
+            console.error('Failed to deactivate ERP patient:', e);
+            Alert.alert('Erreur', "Impossible de désactiver. Vérifiez votre connexion.");
+          }
         },
       },
     ]);

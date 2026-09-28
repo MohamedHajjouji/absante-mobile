@@ -88,26 +88,31 @@ export default function RegisterScreen() {
     setErrors({});
     setNeedsEmailConfirmation(false);
 
-    const { data, error } = await signUp({
-      email,
-      password,
-      fullName,
-      userType,
-    });
+    try {
+      const { data, error } = await signUp({
+        email,
+        password,
+        fullName,
+        userType,
+      });
 
-    setLoading(false);
+      if (error) {
+        Alert.alert('Erreur', getFrenchErrorMessage(error.message));
+        return;
+      }
 
-    if (error) {
-      Alert.alert('Erreur', getFrenchErrorMessage(error.message));
-      return;
+      // If email confirmation is required, Supabase returns a user without a session.
+      if (!data?.session) {
+        setNeedsEmailConfirmation(true);
+      }
+      // If session exists, AuthContext's onAuthStateChange listener
+      // will detect the new session and redirect to the appropriate route.
+    } catch (e) {
+      console.error('Sign up failed:', e);
+      Alert.alert('Erreur', "Erreur de connexion. Vérifiez votre connexion internet");
+    } finally {
+      setLoading(false);
     }
-
-    // If email confirmation is required, Supabase returns a user without a session.
-    if (!data?.session) {
-      setNeedsEmailConfirmation(true);
-    }
-    // If session exists, AuthContext's onAuthStateChange listener
-    // will detect the new session and redirect to the appropriate route.
   };
 
   // ── Email confirmation screen ──

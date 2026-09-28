@@ -22,34 +22,41 @@ export default function AuthCallback() {
 
   useEffect(() => {
     const handleCallback = async () => {
-      // 1. Try to extract auth tokens from the URL hash (OAuth implicit flow)
-      const url = getDeepLinkUrl(searchParams);
+      try {
+        // 1. Try to extract auth tokens from the URL hash (OAuth implicit flow)
+        const url = getDeepLinkUrl(searchParams);
 
-      if (url) {
-        const hashIndex = url.indexOf('#');
-        if (hashIndex !== -1) {
-          const hash = url.substring(hashIndex + 1);
-          const params = new URLSearchParams(hash);
-          const accessToken = params.get('access_token');
-          const refreshToken = params.get('refresh_token');
+        if (url) {
+          const hashIndex = url.indexOf('#');
+          if (hashIndex !== -1) {
+            const hash = url.substring(hashIndex + 1);
+            const params = new URLSearchParams(hash);
+            const accessToken = params.get('access_token');
+            const refreshToken = params.get('refresh_token');
 
-          if (accessToken && refreshToken) {
-            await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken,
-            });
+            if (accessToken && refreshToken) {
+              const { error } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+              });
+              if (error) console.warn('setSession failed:', error.message);
+            }
+          }
+
+          // 2. Try to exchange an auth code (PKCE / code flow)
+          const rawCode = searchParams.code;
+          const code = Array.isArray(rawCode) ? rawCode[0] : rawCode;
+          if (typeof code === 'string' && code.length > 0) {
+            try {
+              await supabase.auth.exchangeCodeForSession(code);
+            } catch {
+              // Older client — code flow may not be supported; ignore
+            }
           }
         }
-
-        // 2. Try to exchange an auth code (PKCE / code flow)
-        const code = searchParams.code as string | undefined;
-        if (code) {
-          try {
-            await supabase.auth.exchangeCodeForSession(code);
-          } catch {
-            // Older client — code flow may not be supported; ignore
-          }
-        }
+      } catch (e) {
+        // Never block navigation: a bad callback URL must not trap the user.
+        console.warn('Auth callback processing failed:', e);
       }
 
       // 3. Navigate to root — AuthContext will redirect to the right place
@@ -58,7 +65,10 @@ export default function AuthCallback() {
       }, 500);
     };
 
-    handleCallback();
+    handleCallback().catch((e) => {
+      console.warn('Auth callback failed:', e);
+      router.replace('/(tabs)');
+    });
   }, [searchParams, router]);
 
   return (

@@ -314,6 +314,7 @@ export default function SalesScreen() {
       return;
     }
     setCustomerSaving(true);
+    try {
     const payload = {
       customer_type: 'individual',
       name: customerForm.name.trim(),
@@ -324,13 +325,18 @@ export default function SalesScreen() {
     const res = customerForm.id
       ? await erpUpdate('customers', customerForm.id, payload)
       : await erpInsert('customers', payload);
-    setCustomerSaving(false);
     if (!res.ok) {
       Alert.alert('Erreur', res.message ?? 'Erreur inconnue.');
       return;
     }
     setShowCustomerModal(false);
     load();
+    } catch (e) {
+      console.error('Failed to save customer:', e);
+      Alert.alert('Erreur', "Impossible d'enregistrer. Vérifiez votre connexion.");
+    } finally {
+      setCustomerSaving(false);
+    }
   };
 
   // ── Document editor open/save ──────────────────────────────
@@ -389,6 +395,9 @@ export default function SalesScreen() {
       setEditingId(doc.id);
       setEditorHeader(h);
       setEditorLines(rows.map(itemRowToLine));
+    } catch (e) {
+      console.error('Failed to load document lines:', e);
+      Alert.alert('Erreur', "Document illisible. Vérifiez votre connexion.");
     } finally {
       setActing(false);
     }
@@ -493,6 +502,9 @@ export default function SalesScreen() {
       }
       setEditorKind(null);
       load();
+    } catch (e) {
+      console.error('Failed to save document:', e);
+      Alert.alert('Erreur', "Enregistrement impossible. Vérifiez votre connexion.");
     } finally {
       setEditorSaving(false);
     }
@@ -506,6 +518,9 @@ export default function SalesScreen() {
       const res = await fn();
       if (!res.ok) Alert.alert('Erreur', res.message ?? 'Action impossible.');
       else load();
+    } catch (e) {
+      console.error('ERP action failed:', e);
+      Alert.alert('Erreur', "Action impossible. Vérifiez votre connexion.");
     } finally {
       setActing(false);
     }
@@ -543,6 +558,9 @@ export default function SalesScreen() {
         Alert.alert('Succès', 'Facture créée depuis le devis.');
         load();
       }
+    } catch (e) {
+      console.error('Quote conversion failed:', e);
+      Alert.alert('Erreur', "Conversion impossible. Vérifiez votre connexion.");
     } finally {
       setActing(false);
     }
@@ -553,6 +571,9 @@ export default function SalesScreen() {
     try {
       const res = await shareInvoicePdf(inv.id);
       if (!res.ok) Alert.alert('Erreur', res.message ?? 'Export impossible.');
+    } catch (e) {
+      console.error('PDF export failed:', e);
+      Alert.alert('Erreur', "Export impossible. Vérifiez votre connexion.");
     } finally {
       setActing(false);
     }
@@ -592,6 +613,9 @@ export default function SalesScreen() {
       });
       if (!res.ok) Alert.alert('Erreur', res.message ?? 'Paiement impossible.');
       else load();
+    } catch (e) {
+      console.error('Payment recording failed:', e);
+      Alert.alert('Erreur', "Paiement impossible. Vérifiez votre connexion.");
     } finally {
       setActing(false);
     }
@@ -611,6 +635,9 @@ export default function SalesScreen() {
         Alert.alert('Succès', 'Avoir créé, facture annulée.');
         load();
       }
+    } catch (e) {
+      console.error('Credit note creation failed:', e);
+      Alert.alert('Erreur', "Avoir impossible. Vérifiez votre connexion.");
     } finally {
       setActing(false);
     }
@@ -937,9 +964,14 @@ export default function SalesScreen() {
         </TouchableOpacity>
         {customerForm.id ? (
           <TouchableOpacity onPress={async () => {
-            const res = await erpDeactivate('customers', customerForm.id);
-            if (!res.ok) Alert.alert('Erreur', res.message ?? 'Impossible de désactiver.');
-            else { setShowCustomerModal(false); load(); }
+            try {
+              const res = await erpDeactivate('customers', customerForm.id);
+              if (!res.ok) Alert.alert('Erreur', res.message ?? 'Impossible de désactiver.');
+              else { setShowCustomerModal(false); load(); }
+            } catch (e) {
+              console.error('Failed to deactivate customer:', e);
+              Alert.alert('Erreur', "Impossible de désactiver. Vérifiez votre connexion.");
+            }
           }} className="mt-3 items-center rounded-lg border border-red-100 bg-red-50 py-3.5">
             <Text className="text-sm font-semibold text-[#c13515]">Désactiver</Text>
           </TouchableOpacity>

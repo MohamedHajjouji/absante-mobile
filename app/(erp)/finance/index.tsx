@@ -96,11 +96,11 @@ export default function FinanceScreen() {
       return;
     }
     setSaving(true);
+    try {
     const res = await erpInsert('expense_categories', {
       name: catName.trim(),
       description: catDesc.trim() || null,
     });
-    setSaving(false);
     if (!res.ok) {
       Alert.alert('Erreur', res.message ?? "Impossible d'enregistrer la catégorie.");
       return;
@@ -109,6 +109,12 @@ export default function FinanceScreen() {
     setCatName('');
     setCatDesc('');
     load();
+    } catch (e) {
+      console.error('Failed to save expense category:', e);
+      Alert.alert('Erreur', "Impossible d'enregistrer. Vérifiez votre connexion.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const submitExpense = async () => {
@@ -122,6 +128,7 @@ export default function FinanceScreen() {
       return;
     }
     setExpSaving(true);
+    try {
     const res = await erpInsert('expenses', {
       expense_number: `EXP-${Date.now().toString(36).toUpperCase()}`,
       category_id: expCatId,
@@ -131,7 +138,6 @@ export default function FinanceScreen() {
       notes: expNotes.trim() || null,
       receipt_url: expReceipt.trim() || null,
     });
-    setExpSaving(false);
     if (!res.ok) {
       Alert.alert('Erreur', res.message ?? "Impossible d'enregistrer la dépense.");
       return;
@@ -141,6 +147,12 @@ export default function FinanceScreen() {
     setExpNotes('');
     setExpReceipt('');
     load();
+    } catch (e) {
+      console.error('Failed to save expense:', e);
+      Alert.alert('Erreur', "Impossible d'enregistrer. Vérifiez votre connexion.");
+    } finally {
+      setExpSaving(false);
+    }
   };
 
   const attachReceipt = () => {
@@ -252,7 +264,18 @@ export default function FinanceScreen() {
                         </Text>
                         {e.receipt_url ? (
                           <TouchableOpacity
-                            onPress={() => Linking.openURL(e.receipt_url as string)}
+                            onPress={() => {
+                              const url = e.receipt_url as string;
+                              Linking.canOpenURL(url)
+                                .then((supported) => {
+                                  if (supported) return Linking.openURL(url);
+                                  Alert.alert('Erreur', 'Impossible d’ouvrir ce reçu.');
+                                })
+                                .catch((err) => {
+                                  console.error('Failed to open receipt:', err);
+                                  Alert.alert('Erreur', 'Impossible d’ouvrir ce reçu.');
+                                });
+                            }}
                             className="flex-row items-center rounded-lg bg-emerald-50 px-2.5 py-1.5"
                             accessibilityLabel="Voir le reçu"
                           >

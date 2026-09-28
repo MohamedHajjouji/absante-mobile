@@ -32,15 +32,19 @@ export default function ClientOnboardingScreen() {
     setLoading(true);
     setError(null);
 
-    const result = await createClientProfile(user.id, firstName, lastName, phone);
-    setLoading(false);
-
-    if (result.error) {
-      setError(result.error);
-      return;
+    try {
+      const result = await createClientProfile(user.id, firstName, lastName, phone);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      router.replace('/(onboarding)/completion');
+    } catch (e) {
+      console.error('Client onboarding failed:', e);
+      setError("Erreur de connexion. Vérifiez votre connexion internet");
+    } finally {
+      setLoading(false);
     }
-
-    router.replace('/(onboarding)/completion');
   };
 
   return (

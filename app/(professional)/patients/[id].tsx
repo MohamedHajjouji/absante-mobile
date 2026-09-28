@@ -37,7 +37,9 @@ export default function PatientDossierScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const params = useLocalSearchParams<{ id?: string }>();
-  const patientId = params.id ?? '';
+  const rawId = params.id;
+  // Deep links can deliver params as arrays — normalize to a single string.
+  const patientId = (Array.isArray(rawId) ? rawId[0] : rawId) ?? '';
 
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<TabKey>('dossier');
@@ -74,6 +76,11 @@ export default function PatientDossierScreen() {
   const lastName = p?.last_name ?? '';
   const name = `${firstName} ${lastName}`.trim() || 'Patient';
   const avatarUri = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&color=ffffff&background=0D61B6`;
+  // Normalize list shapes — a partial dossier must render empty states, never throw.
+  const consultations = dossier?.consultations ?? [];
+  const prescriptions = dossier?.prescriptions ?? [];
+  const vitals = dossier?.vitals ?? [];
+  const documents = dossier?.documents ?? [];
 
   return (
     <SafeAreaView className="flex-1 bg-pageBg" edges={['top']}>
@@ -185,11 +192,11 @@ export default function PatientDossierScreen() {
           )}
 
           {tab === 'consultations' && (
-            dossier?.consultations.length === 0 ? (
+            consultations.length === 0 ? (
               <EmptyBlock text="Aucune consultation enregistrée." />
             ) : (
               <View className="gap-4">
-                {dossier?.consultations.map((c) => (
+                {consultations.map((c) => (
                   <View key={c.id} className="rounded-panel border-hairline bg-white p-4 shadow-panel">
                     <View className="flex-row items-center">
                       <View className="h-10 w-10 items-center justify-center rounded-full bg-primary-50">
@@ -216,11 +223,11 @@ export default function PatientDossierScreen() {
           )}
 
           {tab === 'prescriptions' && (
-            dossier?.prescriptions.length === 0 ? (
+            prescriptions.length === 0 ? (
               <EmptyBlock text="Aucune ordonnance enregistrée." />
             ) : (
               <View className="gap-4">
-                {dossier?.prescriptions.map((rx) => (
+                {prescriptions.map((rx) => (
                   <View key={rx.id} className="rounded-panel border-hairline bg-white p-4 shadow-panel">
                     <View className="flex-row items-center">
                       <View className="h-10 w-10 items-center justify-center rounded-full bg-success-50">
@@ -253,11 +260,11 @@ export default function PatientDossierScreen() {
 
 
           {tab === 'vitals' && (
-            dossier?.vitals.length === 0 ? (
+            vitals.length === 0 ? (
               <EmptyBlock text="Aucune constante enregistrée." />
             ) : (
               <View className="gap-4">
-                {dossier?.vitals.map((v) => (
+                {vitals.map((v) => (
                   <View key={v.id} className="rounded-panel border-hairline bg-white p-4 shadow-panel">
                     <View className="flex-row items-center">
                       <View className="h-10 w-10 items-center justify-center rounded-full bg-warning-50">
@@ -282,11 +289,11 @@ export default function PatientDossierScreen() {
           )}
 
           {tab === 'documents' && (
-            dossier?.documents.length === 0 ? (
+            documents.length === 0 ? (
               <EmptyBlock text="Aucun document." />
             ) : (
               <View className="gap-4">
-                {dossier?.documents.map((doc) => (
+                {documents.map((doc) => (
                   <View key={doc.id} className="flex-row items-center rounded-panel border-hairline bg-white p-4 shadow-panel">
                     <View className="h-11 w-11 items-center justify-center rounded-full bg-primary-50">
                       <Ionicons name="document-text" size={20} color="#F53E8A" />
