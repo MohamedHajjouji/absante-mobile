@@ -19,14 +19,19 @@ const WEEKDAYS = [
 ] as const;
 
 const SERVICE_TYPE_META: Record<ServiceItem['serviceType'], { label: string; icon: string; color: string; bg: string }> = {
-  in_person: { label: 'En présentiel', icon: 'business', color: '#0D61B6', bg: '#ecf2fa' },
-  home_visit: { label: 'À domicile', icon: 'car-sport', color: '#F59E0B', bg: '#fffbeb' },
-  teleconsultation: { label: 'Téléconsultation', icon: 'videocam', color: '#8B5CF6', bg: '#f5f3ff' },
+  consultation: { label: 'Consultation', icon: 'stethoscope', color: '#F53E8A', bg: '#fdeef4' },
+  treatment: { label: 'Soin / Traitement', icon: 'bandage', color: '#8B5CF6', bg: '#f5f3ff' },
+  examination: { label: 'Examen', icon: 'search', color: '#0D61B6', bg: '#ecf2fa' },
+  laboratory: { label: 'Laboratoire', icon: 'flask', color: '#10B981', bg: '#ecfdf5' },
+  radiology: { label: 'Radiologie', icon: 'scan', color: '#8B5CF6', bg: '#f5f3ff' },
+  vaccination: { label: 'Vaccination', icon: 'shield-checkmark', color: '#F59E0B', bg: '#fffbeb' },
+  other: { label: 'Autre', icon: 'ellipsis-horizontal', color: '#6B7280', bg: '#f3f4f6' },
 };
 
 const BOOKING_MODE_LABEL: Record<ServiceItem['bookingMode'], string> = {
-  direct: 'Réservation directe',
-  request: 'Sur demande',
+  office: 'Au cabinet',
+  home: 'À domicile',
+  teleconsultation: 'Téléconsultation',
 };
 
 /**

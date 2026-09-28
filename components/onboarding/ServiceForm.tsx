@@ -4,14 +4,19 @@ import { Ionicons } from '@expo/vector-icons';
 import { ServiceItem } from '@/lib/onboarding/onboarding-store';
 
 const SERVICE_TYPES = [
-  { value: 'in_person' as const, label: 'En présentiel', icon: 'business' as const, color: '#0D61B6' },
-  { value: 'home_visit' as const, label: 'À domicile', icon: 'car-sport' as const, color: '#F59E0B' },
-  { value: 'teleconsultation' as const, label: 'Téléconsultation', icon: 'videocam' as const, color: '#8B5CF6' },
+  { value: 'consultation' as const, label: 'Consultation', icon: 'medkit' as const, color: '#F53E8A' },
+  { value: 'treatment' as const, label: 'Soin / Traitement', icon: 'bandage' as const, color: '#8B5CF6' },
+  { value: 'examination' as const, label: 'Examen', icon: 'search' as const, color: '#0D61B6' },
+  { value: 'laboratory' as const, label: 'Laboratoire', icon: 'flask' as const, color: '#10B981' },
+  { value: 'radiology' as const, label: 'Radiologie', icon: 'scan' as const, color: '#8B5CF6' },
+  { value: 'vaccination' as const, label: 'Vaccination', icon: 'shield-checkmark' as const, color: '#F59E0B' },
+  { value: 'other' as const, label: 'Autre', icon: 'ellipsis-horizontal' as const, color: '#6B7280' },
 ];
 
 const BOOKING_MODES = [
-  { value: 'direct' as const, label: 'Réservation directe', icon: 'flash' as const },
-  { value: 'request' as const, label: 'Sur demande', icon: 'time' as const },
+  { value: 'office' as const, label: 'Au cabinet', icon: 'business' as const },
+  { value: 'home' as const, label: 'À domicile', icon: 'car-sport' as const },
+  { value: 'teleconsultation' as const, label: 'Téléconsultation', icon: 'videocam' as const },
 ];
 
 const DURATION_PRESETS = [15, 30, 45, 60, 90];
@@ -30,10 +35,10 @@ export function ServiceForm({ initial, onSubmit, onCancel }: ServiceFormProps) {
   const [name, setName] = useState(initial?.name ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [serviceType, setServiceType] = useState<ServiceItem['serviceType']>(
-    initial?.serviceType ?? 'in_person'
+    initial?.serviceType ?? 'consultation'
   );
   const [bookingMode, setBookingMode] = useState<ServiceItem['bookingMode']>(
-    initial?.bookingMode ?? 'direct'
+    initial?.bookingMode ?? 'office'
   );
   const [duration, setDuration] = useState(initial?.durationMinutes ?? 30);
   const [price, setPrice] = useState(initial?.price?.toString() ?? '');

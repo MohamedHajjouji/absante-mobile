@@ -50,8 +50,8 @@ export interface ServiceItem {
   id: string;
   name: string;
   description: string;
-  serviceType: 'in_person' | 'home_visit' | 'teleconsultation';
-  bookingMode: 'direct' | 'request';
+  serviceType: 'consultation' | 'treatment' | 'examination' | 'laboratory' | 'radiology' | 'vaccination' | 'other';
+  bookingMode: 'office' | 'home' | 'teleconsultation';
   durationMinutes: number;
   price: number;
 }

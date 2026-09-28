@@ -160,7 +160,8 @@ export async function submitOnboarding(data: OnboardingData) {
     }
   }
 
-  // 8. Insert provider services
+  // 8. Insert provider services (values must match service_type_enum /
+  // booking_mode_enum or the insert fails)
   if (data.services.length > 0) {
     const servicesPayload = data.services.map((svc) => ({
       provider_id: providerId, name: svc.name, description: svc.description || null,
@@ -169,7 +170,7 @@ export async function submitOnboarding(data: OnboardingData) {
       price: svc.price, currency: 'MAD', active: true,
     }));
     const { error: svcError } = await supabase.from('provider_services').insert(servicesPayload);
-    if (svcError) console.error('Failed to insert services:', svcError.message);
+    if (svcError) return { success: false, error: `Services: ${svcError.message}` };
   }
 
   // 9. Create default calendar + working hours

@@ -119,6 +119,18 @@ export async function resetPassword(email: string) {
   return { error };
 }
 
+/** Link guest bookings made with the account's email to the patient record.
+ *  Called after every sign-in (see AuthContext). Non-blocking by design. */
+export async function claimGuestBookings(): Promise<number> {
+  try {
+    const { data, error } = await supabase.rpc('claim_guest_patient_rows');
+    if (error) return 0;
+    return typeof data === 'number' ? data : 0;
+  } catch {
+    return 0;
+  }
+}
+
 /** Sign the current user out. */
 export async function signOut() {
   const { error } = await supabase.auth.signOut();

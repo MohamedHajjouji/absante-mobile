@@ -156,7 +156,7 @@ export default function ServicesScreen() {
           ) : (
             <View className="gap-4">
               {services.map((s) => {
-                const meta = SERVICE_TYPE_META[s.serviceType] ?? SERVICE_TYPE_META.in_person;
+                const meta = SERVICE_TYPE_META[s.serviceType] ?? SERVICE_TYPE_META.other;
                 return (
                   <View key={s.id} className="overflow-hidden rounded-panel border-hairline bg-white shadow-panel">
                     <View className="p-4">
@@ -286,8 +286,8 @@ function ServiceFormModal({
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
   const [duration, setDuration] = useState('');
-  const [serviceType, setServiceType] = useState('in_person');
-  const [bookingMode, setBookingMode] = useState('direct');
+  const [serviceType, setServiceType] = useState('consultation');
+  const [bookingMode, setBookingMode] = useState('office');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -297,8 +297,8 @@ function ServiceFormModal({
       setDescription(initial?.description ?? '');
       setPrice(initial ? String(initial.price) : '');
       setDuration(initial ? String(initial.durationMinutes) : '');
-      setServiceType(initial?.serviceType ?? 'in_person');
-      setBookingMode(initial?.bookingMode ?? 'direct');
+      setServiceType(initial?.serviceType ?? 'consultation');
+      setBookingMode(initial?.bookingMode ?? 'office');
       setError(null);
     }
   }, [visible, initial]);

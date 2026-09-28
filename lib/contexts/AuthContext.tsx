@@ -8,7 +8,7 @@ import {
 } from 'react';
 import { supabase } from '@/lib/supabase';
 import * as Linking from 'expo-linking';
-import { processOAuthCallback } from '@/lib/services/auth-service';
+import { processOAuthCallback, claimGuestBookings } from '@/lib/services/auth-service';
 
 export type UserRole = 'professional' | 'patient';
 
@@ -116,9 +116,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Handle a deep link that may contain an OAuth callback token
-  const handleDeepLink = async (url: string) => {
-    await processOAuthCallback(url);
+  // Handle a deep link that may contain an OAuth callback token.
+  // Never throws — a bad/missing link must not block app startup.
+  const handleDeepLink = async (url: string | null | undefined) => {
+    if (!url) return;
+    try {
+      await processOAuthCallback(url);
+    } catch (error) {
+      console.warn('Ignoring unprocessable deep link:', error);
+    }
   };
 
   const refreshProfile = useCallback(async (): Promise<UserRole | null> => {
@@ -131,23 +137,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let isMounted = true;
 
     const initialize = async () => {
-      // Process any pending deep-link URL (e.g. OAuth callback cold start)
-      const initialUrl = await Linking.getInitialURL();
-      if (initialUrl) {
-        await handleDeepLink(initialUrl);
-      }
+      try {
+        // Process any pending deep-link URL (e.g. OAuth callback cold start)
+        const initialUrl = await Linking.getInitialURL();
+        if (initialUrl) {
+          await handleDeepLink(initialUrl);
+        }
 
-      // Check the current session
-      const { data: { session } } = await supabase.auth.getSession();
+        // Check the current session
+        const { data: { session } } = await supabase.auth.getSession();
 
-      if (isMounted && session?.user) {
-        setIsSignedIn(true);
-        setUser(session.user);
-        await determineProfile(session.user.id);
-      }
-
-      if (isMounted) {
-        setIsLoaded(true);
+        if (isMounted && session?.user) {
+          setIsSignedIn(true);
+          setUser(session.user);
+          await determineProfile(session.user.id);
+        }
+      } catch (error) {
+        // Offline / corrupt storage / missing env must still let the app
+        // open (as a guest) instead of hanging on the splash screen.
+        console.error('Auth initialization failed, continuing as guest:', error);
+      } finally {
+        if (isMounted) {
+          setIsLoaded(true);
+        }
       }
     };
 
@@ -162,6 +174,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (session?.user) {
         setIsSignedIn(true);
         setUser(session.user);
+        // Link any bookings made as a guest with this email (web booking
+        // without an account) so they show up in the app. Non-blocking and
+        // never fatal — offline failures must not kill the session.
+        try {
+          await claimGuestBookings();
+        } catch (error) {
+          console.warn('claimGuestBookings failed, skipping:', error);
+        }
         await determineProfile(session.user.id);
       } else if (event === 'SIGNED_OUT') {
         setIsSignedIn(false);

@@ -4,99 +4,95 @@ This guide specifies the exact image files needed for a production-ready
 Expo SDK 57 app using EAS Build.
 
 > EAS Build generates all platform-specific sizes (iOS app icons at every
-> resolution + Android adaptive icons) from these source files. You only need
-> to create **two** PNG images.
+> resolution + Android adaptive icons) from these source files.
 
 ---
 
-## 1. App Icon — `assets/applogo.png`
+## 1. App Icon — `assets/icon.png`
 
 | Property        | Requirement                                         |
 |-----------------|-----------------------------------------------------|
 | Dimensions      | **1024 × 1024 px** (exactly square)                 |
 | Format          | **PNG**                                             |
-| Name            | `applogo.png`                                          |
-| Background      | **Opaque** — fill the entire square                 |
+| Name            | `icon.png` (referenced by `app.json` → `expo.icon`) |
+| Background      | **Opaque white** — fills the entire square          |
 | Corners         | **Square** — no rounded corners (OS masks them)     |
-| Transparency    | **No transparency** — the logo must fill the canvas |
+| Safe zone       | Logo inset to **~660 px**, centered — nothing       |
+|                 | touches the canvas edges                            |
 
-**Why:** EAS Build reads this single 1024×1024 image and generates every
-iOS icon size (20×20 through 1024×1024 at 1×/2×/3×) and the Android
-adaptive icon foreground/background layers.
+**Why the padding?** Android adaptive icons mask ~25% off each edge
+(circle / squircle / rounded-square). The old `applogo.png` was artwork
+bleeding to the canvas edges, so the OS cropped the "AB SANTÉ" text and
+the hand graphic — the "doesn't fit" look. `icon.png` keeps the artwork
+inside the safe zone, so masks only crop white padding.
 
-### Visual best practices
-- Logo should be centered and touch the edges of the 1024×1024 square.
-- Text (if any) should be large and legible at small sizes.
-- Test against both light and dark wallpapers.
+### Regenerating
+
+```bash
+cd $TEMP/opencode/iconwork   # `sharp@0.34` sandbox (not a project dep)
+node gen.mjs                 # rebuilds icon.png / adaptive-icon.png / splash-icon.png
+```
+
+Source art: `applogo.png` (1024×1024, opaque). Keep it — it is the master.
 
 ---
 
-## 2. Splash Screen — `assets/appsplash.png`
+## 2. Android Adaptive Icon — `assets/adaptive-icon.png`
+
+| Property        | Requirement                                         |
+|-----------------|-----------------------------------------------------|
+| Dimensions      | **1024 × 1024 px**                                  |
+| Format          | **PNG**                                             |
+| Safe zone       | Same 660 px centered inset as `icon.png`            |
+
+Wired in `app.json`:
+
+```json
+"android": {
+  "adaptiveIcon": {
+    "foregroundImage": "./assets/adaptive-icon.png",
+    "monochromeImage": "./assets/adaptive-icon.png",
+    "backgroundColor": "#FFFFFF"
+  }
+}
+```
+
+---
+
+## 3. Splash Screen — `assets/splash-icon.png`
 
 | Property        | Requirement                                         |
 |-----------------|-----------------------------------------------------|
 | Dimensions      | **1024 × 1024 px** (recommended)                    |
-| Format          | **PNG**                                             |
-| Name            | `appsplash.png`                                     |
-| Background      | **Transparent**                                     |
-| Content         | Logo only, centered with generous padding           |
+| Format          | **PNG, transparent**                                |
+| Content         | Logo only, inset to **~640 px**, centered           |
 
-**Why transparent?** The splash screen fills the screen with your
-`backgroundColor` (currently `#FFFFFF` in `app.json`). A transparent PNG
-with just the logo centered on top looks polished across all devices.
+Wired in `app.json` twice (legacy key + SDK 57 plugin):
 
-### Splash screen config in `app.json`
 ```json
 "splash": {
-  "image": "./assets/appsplash.png",
+  "image": "./assets/splash-icon.png",
   "resizeMode": "contain",
   "backgroundColor": "#FFFFFF"
 }
 ```
 
-- `resizeMode`: `"contain"` (default — shows full image, adds padding) or `"cover"` (fills screen, may crop edges).
-- `backgroundColor`: Hex color filling areas not covered by the image.
-
-### Optional: Dark mode variant
-To support dark mode, add the `expo-splash-screen` plugin to `app.json`:
 ```json
-"plugins": [
-  "expo-router",
-  "expo-secure-store",
-  "expo-web-browser",
-  ["expo-splash-screen", {
-    "image": "./assets/appsplash.png",
-    "backgroundColor": "#FFFFFF",
-    "dark": {
-      "image": "./assets/appsplash.png",
-      "backgroundColor": "#000000"
-    },
-    "imageWidth": 200
-  }]
-]
+["expo-splash-screen", {
+  "image": "./assets/splash-icon.png",
+  "imageWidth": 200,
+  "resizeMode": "contain",
+  "backgroundColor": "#FFFFFF"
+}]
 ```
 
----
-
-## 3. Can You Reuse the Same Image?
-
-You *can* use one file for both, but it's not ideal:
-- The **app icon** needs an opaque background (no transparency).
-- The **splash screen** works best with transparency so the background color shows through.
-
-**Recommendation:** Create two separate files for the best visual result.
+Source art: `appsplash.png` (1024×1024, transparent). Keep it as master;
+`BrandLogo` (in-app navbar/auth imagery) still uses `appsplash.png`
+because edge-to-edge art fills small UI boxes better.
 
 ---
 
-## 4. Tooling
-
-- **Figma template:** https://www.figma.com/community/file/1170239179037232798 (Expo Splash Screen & App Icon template)
-- **Generate from SVG:** Use [droidgen](https://github.com/akexorcist/Android-Asset-Studio) or
-  [exp-icon](https://github.com/expo/expo-icon) for automated generation.
-
----
-
-## 5. Building for Production
+## 4. Building for Production
 
 After adding your images, run:
 
@@ -104,9 +100,14 @@ After adding your images, run:
 eas build --platform all --profile production
 ```
 
-This produces:
-- **Android:** `.aab` (Android App Bundle) for Google Play Store
-- **iOS:** `.ipa` for Apple App Store
+⚠️ **Production env:** `.env` is gitignored and is NOT uploaded to EAS.
+Set the two public vars as EAS secrets before building, otherwise the
+app opens without Supabase credentials:
+
+```bash
+eas secret:create --name EXPO_PUBLIC_SUPABASE_URL --value https://xxx.supabase.co
+eas secret:create --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value eyJ...
+```
 
 > ⚠️ Do **not** use `expo start` / Expo Go to test splash screens. Use a
 > production or preview build for accurate splash screen testing.

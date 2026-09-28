@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
+  TextInput,
   ScrollView,
   TouchableOpacity,
   Pressable,
@@ -22,7 +23,10 @@ import {
   getPatientByProfileId,
   getMyAppointments,
   cancelAppointment,
+  getReviewForAppointment,
+  submitReview,
   PatientAppointment,
+  AppointmentReview,
 } from '@/lib/services/patient-service';
 
 function formatTime(iso: string) {
@@ -40,6 +44,123 @@ function formatDayNumber(iso: string) {
 
 function formatMonth(iso: string) {
   return new Date(iso).toLocaleDateString('fr-FR', { month: 'short' }).replace('.', '');
+}
+
+/** Star rating + comment for a completed appointment. Shown in the detail modal. */
+function ReviewSection({
+  appointmentId,
+  providerId,
+  patientId,
+}: {
+  appointmentId: string;
+  providerId: string;
+  patientId: string;
+}) {
+  const [existing, setExisting] = useState<AppointmentReview | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const review = await getReviewForAppointment(appointmentId);
+      if (!active) return;
+      setExisting(review);
+      if (review) {
+        setRating(review.rating);
+        setComment(review.comment ?? '');
+      }
+      setLoading(false);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [appointmentId]);
+
+  if (loading) {
+    return (
+      <View className="mt-5 items-center py-3">
+        <ActivityIndicator size="small" color="#F53E8A" />
+      </View>
+    );
+  }
+
+  if (existing) {
+    return (
+      <View className="mt-5 rounded-panel border border-hairline bg-softCloud/40 p-4">
+        <View className="flex-row items-center gap-1">
+          {[1, 2, 3, 4, 5].map((s) => (
+            <Ionicons
+              key={s}
+              name={s <= existing.rating ? 'star' : 'star-outline'}
+              size={18}
+              color="#F59E0B"
+            />
+          ))}
+          <Text className="ml-1 text-xs font-medium text-grayText">Votre avis</Text>
+        </View>
+        {!!existing.comment && (
+          <Text className="mt-2 text-sm text-dark">{existing.comment}</Text>
+        )}
+      </View>
+    );
+  }
+
+  const handleSubmit = async () => {
+    setSaving(true);
+    const result = await submitReview({
+      appointmentId,
+      providerId,
+      patientId,
+      rating,
+      comment,
+    });
+    setSaving(false);
+    if (result.success) {
+      setExisting({ id: 'new', rating, comment: comment.trim() || null });
+    } else {
+      Alert.alert('Erreur', result.error || "Impossible d'envoyer votre avis.");
+    }
+  };
+
+  return (
+    <View className="mt-5 rounded-panel border border-hairline bg-white p-4 shadow-panel">
+      <Text className="text-sm font-semibold text-dark">Noter cette consultation</Text>
+      <View className="mt-3 flex-row items-center gap-1">
+        {[1, 2, 3, 4, 5].map((s) => (
+          <TouchableOpacity key={s} onPress={() => setRating(s)} activeOpacity={0.7}>
+            <Ionicons
+              name={s <= rating ? 'star' : 'star-outline'}
+              size={30}
+              color="#F59E0B"
+            />
+          </TouchableOpacity>
+        ))}
+      </View>
+      <TextInput
+        value={comment}
+        onChangeText={setComment}
+        placeholder="Partagez votre expérience (optionnel)..."
+        placeholderTextColor="#929292"
+        multiline
+        numberOfLines={3}
+        className="mt-3 rounded-lg border border-hairline px-3 py-2.5 text-sm text-dark"
+        style={{ textAlignVertical: 'top' }}
+      />
+      <TouchableOpacity
+        className="mt-3 rounded-lg bg-primary py-3"
+        activeOpacity={0.8}
+        onPress={handleSubmit}
+        disabled={saving}
+      >
+        <Text className="text-center text-sm font-medium text-white">
+          {saving ? 'Envoi...' : 'Envoyer mon avis'}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
 }
 
 export default function AppointmentsScreen() {
@@ -325,6 +446,14 @@ export default function AppointmentsScreen() {
                     <Text className="text-center text-sm font-medium text-white">Reporter</Text>
                   </TouchableOpacity>
                 </View>
+              )}
+
+              {selected.status === 'completed' && patientId && (
+                <ReviewSection
+                  appointmentId={selected.id}
+                  providerId={selected.providerId}
+                  patientId={patientId}
+                />
               )}
             </View>
           </View>

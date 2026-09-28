@@ -9,8 +9,9 @@ import { Image, ImageStyle, StyleProp } from 'react-native';
  *   - "navbar": appsplash.png — transparent bg (headers/navbars)
  *   - "standard": appsplash.png — transparent bg (auth screens/footers)
  *
- * Note: applogo.png (opaque white bg) is reserved exclusively for the OS
- * app icon via app.json — never render it inside the app UI.
+ * Note: icon.png / adaptive-icon.png (padded, opaque white bg) are reserved
+ * exclusively for the OS launcher via app.json — never render them inside
+ * the app UI.
  */
 interface BrandLogoProps {
   variant?: 'navbar' | 'standard';

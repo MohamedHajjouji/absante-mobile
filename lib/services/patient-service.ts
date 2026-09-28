@@ -141,10 +141,14 @@ export async function updateUserProfile(
 // ── Patient ─────────────────────────────────────────────────
 
 export async function getPatientByProfileId(userId: string): Promise<PatientProfile | null> {
+  // Oldest row wins: duplicate patients rows for one profile must never
+  // blank out "My bookings" (maybeSingle errors on >1 row).
   const { data, error } = await supabase
     .from('patients')
     .select('*')
     .eq('profile_id', userId)
+    .order('created_at', { ascending: true })
+    .limit(1)
     .maybeSingle();
 
   if (error || !data) return null;
@@ -579,6 +583,54 @@ export async function cancelAppointment(
   return { success: true };
 }
 
+// ── Reviews ─────────────────────────────────────────────────
+
+export interface AppointmentReview {
+  id: string;
+  rating: number;
+  comment: string | null;
+}
+
+/** Existing review for an appointment, if the patient already rated it. */
+export async function getReviewForAppointment(
+  appointmentId: string
+): Promise<AppointmentReview | null> {
+  const { data } = await supabase
+    .from('reviews')
+    .select('id, rating, comment')
+    .eq('appointment_id', appointmentId)
+    .maybeSingle();
+  if (!data) return null;
+  return { id: data.id, rating: data.rating, comment: data.comment ?? null };
+}
+
+/** Rate a completed appointment (RLS: own patient row + completed only). */
+export async function submitReview(params: {
+  appointmentId: string;
+  providerId: string;
+  patientId: string;
+  rating: number;
+  comment?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  if (params.rating < 1 || params.rating > 5) {
+    return { success: false, error: 'Note invalide' };
+  }
+  const { error } = await supabase.from('reviews').insert({
+    appointment_id: params.appointmentId,
+    provider_id: params.providerId,
+    patient_id: params.patientId,
+    rating: params.rating,
+    comment: params.comment?.trim() || null,
+  });
+  if (error) {
+    if (error.code === '23505') {
+      return { success: false, error: 'Vous avez déjà noté ce rendez-vous.' };
+    }
+    return { success: false, error: error.message };
+  }
+  return { success: true };
+}
+
 // ── Booking ─────────────────────────────────────────────────
 
 export async function bookAppointment(params: {
@@ -611,25 +663,23 @@ export async function bookAppointment(params: {
     .eq('id', params.calendarId)
     .single();
 
-  const { data, error } = await supabase
-    .from('appointments')
-    .insert({
-      provider_id: params.providerId,
-      patient_id: patientId,
-      provider_service_id: params.serviceId,
-      calendar_id: params.calendarId,
-      facility_id: cal?.facility_id ?? null,
-      starts_at: params.startsAt,
-      ends_at: params.endsAt,
-      status: 'pending',
-      patient_notes: params.notes || null,
-    })
-    .select('id')
-    .single();
+  // Atomic server-side booking (ownership + consistency + true overlap
+  // check + conversation creation). Never insert appointments directly:
+  // client-side availability checks race under concurrency.
+  const { data: appointmentId, error } = await supabase.rpc('create_account_booking', {
+    p_patient_id: patientId,
+    p_provider_id: params.providerId,
+    p_service_id: params.serviceId,
+    p_calendar_id: params.calendarId,
+    p_facility_id: cal?.facility_id ?? null,
+    p_starts_at: params.startsAt,
+    p_ends_at: params.endsAt,
+    p_notes: params.notes || null,
+  });
 
-  if (error || !data) {
+  if (error || !appointmentId) {
     return { success: false, error: error?.message || 'Failed to book appointment' };
   }
 
-  return { success: true, appointmentId: data.id };
+  return { success: true, appointmentId };
 }

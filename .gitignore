@@ -32,6 +32,9 @@ yarn-error.*
 
 # local env files
 .env*.local
+# never commit live Supabase credentials (anon key is public-by-design but
+# the project URL/key pair should come from EAS secrets per build profile)
+.env
 
 # typescript
 *.tsbuildinfo
