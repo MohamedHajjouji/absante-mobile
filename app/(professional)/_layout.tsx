@@ -3,12 +3,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { View } from 'react-native';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { SplashScreen } from '@/components/ui/SplashScreen';
+import { useFloatingTabBarStyle } from '@/components/ui/tabBarStyle';
 
 const ACTIVE_TINT = '#F53E8A';
 const INACTIVE_TINT = '#6a6a6a';
 
 export default function ProfessionalLayout() {
   const { isLoaded, isSignedIn, role, needsOnboarding } = useAuth();
+  // Hook first: must run before any early return. The style adapts to the
+  // Android system nav bar / iOS home indicator via safe-area insets.
+  const tabBarStyle = useFloatingTabBarStyle();
 
   if (!isLoaded) {
     return <SplashScreen />;
@@ -33,20 +37,7 @@ export default function ProfessionalLayout() {
         tabBarActiveTintColor: ACTIVE_TINT,
         tabBarInactiveTintColor: INACTIVE_TINT,
         headerShown: false,
-        tabBarStyle: {
-          position: 'absolute',
-          backgroundColor: '#FFFFFF',
-          borderTopWidth: 1,
-          borderTopColor: '#F2F2F2',
-          height: 84,
-          paddingTop: 10,
-          paddingBottom: 20,
-          shadowColor: '#3D4B64',
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.05,
-          shadowRadius: 16,
-          elevation: 12,
-        },
+        tabBarStyle,
         tabBarLabelStyle: {
           fontSize: 12,
           fontWeight: '500',

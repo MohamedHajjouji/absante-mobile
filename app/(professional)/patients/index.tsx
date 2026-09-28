@@ -109,7 +109,7 @@ export default function PatientsListScreen() {
 
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingBottom: 112, paddingHorizontal: 20, paddingTop: 16 }}
+        contentContainerStyle={{ paddingBottom: 124, paddingHorizontal: 20, paddingTop: 16 }}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >

@@ -86,7 +86,7 @@ export default function PatientDossierScreen() {
     <SafeAreaView className="flex-1 bg-pageBg" edges={['top']}>
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingBottom: 40 }}
+        contentContainerStyle={{ paddingBottom: 124 }}
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}

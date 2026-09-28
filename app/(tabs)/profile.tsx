@@ -158,7 +158,7 @@ export default function ProfileScreen() {
     <SafeAreaView className="flex-1 overflow-hidden bg-pageBg" edges={['top']}>
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingBottom: 112, paddingTop: 4 }}
+        contentContainerStyle={{ paddingBottom: 124, paddingTop: 4 }}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >

@@ -121,7 +121,7 @@ export default function SearchScreen() {
     <SafeAreaView className="flex-1 bg-pageBg" edges={['top']}>
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingBottom: 112 }}
+        contentContainerStyle={{ paddingBottom: 124 }}
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}

@@ -1,12 +1,12 @@
 import { View, Text, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Link } from 'expo-router';
-import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
+import { Ionicons } from '@expo/vector-icons';
 
 import { BrandLogo } from '@/components/ui/BrandLogo';
 
 interface RoleCardProps {
-  icon: keyof typeof FontAwesome6.glyphMap;
+  icon: keyof typeof Ionicons.glyphMap;
   iconColor: string;
   backgroundClass: string;
   iconBackgroundClass: string;
@@ -41,7 +41,7 @@ function RoleCard({
       <View
         className={`mr-4 h-[80px] w-[80px] items-center justify-center rounded-full ${iconBackgroundClass}`}
       >
-        <FontAwesome6 name={icon} size={36} color={iconColor} />
+        <Ionicons name={icon} size={36} color={iconColor} />
       </View>
 
       {/* Text */}
@@ -60,8 +60,8 @@ function RoleCard({
         className="ml-2 h-[30px] w-[30px] items-center justify-center rounded-full"
         style={{ backgroundColor: `${iconColor}10` }}
       >
-        <FontAwesome6
-          name="chevron-right"
+        <Ionicons
+          name="chevron-forward"
           size={13}
           color={iconColor}
         />
@@ -122,7 +122,7 @@ export default function WelcomeScreen() {
           </Text>
 
           <RoleCard
-            icon="user-large"
+            icon="person"
             iconColor="#F53E8A"
             backgroundClass="bg-white"
             iconBackgroundClass="bg-primary-50"
@@ -132,7 +132,7 @@ export default function WelcomeScreen() {
           />
 
           <RoleCard
-            icon="user-doctor"
+            icon="medkit"
             iconColor="#3578FF"
             backgroundClass="bg-white"
             iconBackgroundClass="bg-secondary-50"
@@ -147,8 +147,8 @@ export default function WelcomeScreen() {
         {/* Trust */}
         <View className="mt-[30px] items-center">
           <View className="mb-[9px] h-[38px] w-[38px] items-center justify-center rounded-full bg-secondary-50">
-            <FontAwesome6
-              name="shield-heart"
+            <Ionicons
+              name="shield-checkmark"
               size={17}
               color="#3578FF"
             />
