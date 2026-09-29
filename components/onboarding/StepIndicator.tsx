@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useOnboardingStore } from '@/lib/onboarding/onboarding-store';
 
 const STEP_LABELS = [
+  'Retrouver',
   'Profession',
   'Infos perso.',
   'Organisation',

@@ -263,7 +263,7 @@ export default function ProfileScreen() {
               {signingOut ? 'Déconnexion...' : 'Se déconnecter'}
             </Text>
           </TouchableOpacity>
-          <Text className="mt-4 text-center text-xs text-grayText">AB Santé v1.0.0</Text>
+          <Text className="mt-4 text-center text-xs text-grayText">AB Santé v1.0.2</Text>
         </Animated.View>
       </ScrollView>
 

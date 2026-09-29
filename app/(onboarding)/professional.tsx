@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StepIndicator } from '@/components/onboarding/StepIndicator';
+import { StepIdentityCheck } from '@/components/onboarding/StepIdentityCheck';
 import { StepProfession } from '@/components/onboarding/StepProfession';
 import { StepPersonalInfo } from '@/components/onboarding/StepPersonalInfo';
 import { StepOrganization } from '@/components/onboarding/StepOrganization';
@@ -15,23 +16,26 @@ import { submitOnboarding, saveVerificationDocument } from '@/lib/onboarding/sub
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { uploadAvatar } from '@/lib/services/user-service';
 
-const STEPS = [StepProfession, StepPersonalInfo, StepOrganization, StepServices, StepVerification];
+const STEPS = [StepIdentityCheck, StepProfession, StepPersonalInfo, StepOrganization, StepServices, StepVerification];
 
 export default function ProfessionalOnboardingScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { currentStep, nextStep, prevStep, reset, profession, personalInfo, organizationInfo, address, facility, services, workingHours, verificationDocs, agreedToTerms } = useOnboardingStore();
+  const { currentStep, nextStep, prevStep, reset, claimedProviderId, claimedProviderName, profession, personalInfo, organizationInfo, address, facility, services, workingHours, verificationDocs, agreedToTerms } = useOnboardingStore();
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const isClaimMode = claimedProviderId !== null;
+
   const canProceed = (): boolean => {
     switch (currentStep) {
-      case 0: return profession != null;
-      case 1: return !!personalInfo.firstName && !!personalInfo.lastName && !!personalInfo.phone;
-      case 2: return !!organizationInfo.name && !!address.city && !!address.streetAddress;
-      case 3: return services.length > 0;
-      case 4: return agreedToTerms;
+      case 0: return true; // identity check is optional — claim or new
+      case 1: return profession != null;
+      case 2: return !!personalInfo.firstName && !!personalInfo.lastName && !!personalInfo.phone;
+      case 3: return !!organizationInfo.name && !!address.city && !!address.streetAddress;
+      case 4: return services.length > 0;
+      case 5: return agreedToTerms;
       default: return true;
     }
   };
@@ -62,8 +66,10 @@ export default function ProfessionalOnboardingScreen() {
         await uploadAvatar(personalInfo.avatarUrl, user.id);
       }
 
-      // 2. Submit onboarding data
+      // 2. Submit onboarding data (claim mode reuses the directory row +
+      // files a profile_claims request; new mode creates a fresh provider)
       const result = await submitOnboarding({
+        claimedProviderId,
         profession: profession ?? '',
         personalInfo,
         organizationInfo,
@@ -94,9 +100,14 @@ export default function ProfessionalOnboardingScreen() {
         }
       }
 
-      // 4. Success
+      // 4. Success — pass the request type to the completion screen
+      // (store is reset, so params carry claim vs add).
+      const mode = isClaimMode ? 'claim' : 'add';
       reset();
-      router.replace('/(onboarding)/completion');
+      router.replace({
+        pathname: '/(onboarding)/completion',
+        params: mode === 'claim' ? { mode, name: claimedProviderName ?? '' } : { mode },
+      });
     } catch (e) {
       setError("Une erreur s'est produite. Veuillez réessayer.");
       setSubmitting(false);
@@ -136,14 +147,14 @@ export default function ProfessionalOnboardingScreen() {
 
         {!isLastStep ? (
           <PrimaryButton
-            title="Continuer"
+            title={currentStep === 0 ? (isClaimMode ? 'Revendiquer et continuer' : 'Continuer comme nouveau') : 'Continuer'}
             onPress={handleNext}
             disabled={!canProceed()}
             className={currentStep > 0 ? 'flex-1' : 'w-full'}
           />
         ) : (
           <PrimaryButton
-            title={submitting ? 'Envoi en cours...' : 'Terminer l\'inscription'}
+            title={submitting ? 'Envoi en cours...' : isClaimMode ? 'Demander la revendication' : "Demander l'ajout"}
             onPress={handleSubmit}
             loading={submitting}
             className="flex-1"

@@ -2,12 +2,15 @@ import { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@/lib/contexts/AuthContext';
 
 export default function OnboardingCompletionScreen() {
   const router = useRouter();
   const { refreshProfile } = useAuth();
+  const params = useLocalSearchParams<{ mode?: string; name?: string }>();
+  const isClaimMode = params.mode === 'claim';
+  const claimedName = Array.isArray(params.name) ? params.name[0] : params.name;
   const [loading, setLoading] = useState(false);
 
   const handleContinue = async () => {
@@ -43,12 +46,14 @@ export default function OnboardingCompletionScreen() {
 
         <View className="mt-8 px-6">
           <Text className="text-center text-2xl font-semibold tracking-[-0.3px] text-dark">
-            Félicitations !
+            {isClaimMode ? 'Demande de revendication envoyée !' : "Demande d'ajout envoyée !"}
           </Text>
           <Text className="mt-3 text-center text-sm font-medium leading-5 text-grayText">
-            Votre inscription est en cours de validation. Notre équipe
-            examinera votre profil et vous recevra une notification
-            dès que votre compte sera activé.
+            {isClaimMode ? (
+              <>Votre demande pour le profil Dr {claimedName} est en cours de vérification. Nous vous contacterons si besoin avant de vous lier le profil.</>
+            ) : (
+              <>Votre inscription est en cours de validation. Notre équipe examinera votre profil et vous recevra une notification dès que votre compte sera activé.</>
+            )}
           </Text>
         </View>
 

@@ -76,6 +76,8 @@ export interface VerificationDocs {
 
 interface OnboardingState {
   currentStep: number;
+  claimedProviderId: string | null;
+  claimedProviderName: string | null;
   profession: ProfessionType | null;
   selectedSpecialtyIds: string[];
   personalInfo: PersonalInfo;
@@ -90,6 +92,8 @@ interface OnboardingState {
   isSubmitting: boolean;
 
   setCurrentStep: (step: number) => void;
+  setClaimedProfile: (id: string | null, name?: string | null) => void;
+  clearClaimedProfile: () => void;
   nextStep: () => void;
   prevStep: () => void;
   setProfession: (profession: ProfessionType) => void;
@@ -141,6 +145,8 @@ const defaultWorkingHours: WorkingHours[] = [
 
 export const useOnboardingStore = create<OnboardingState>((set) => ({
   currentStep: 0,
+  claimedProviderId: null,
+  claimedProviderName: null,
   profession: null,
   selectedSpecialtyIds: [],
   personalInfo: initialPersonalInfo,
@@ -155,7 +161,9 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   isSubmitting: false,
 
   setCurrentStep: (step) => set({ currentStep: step }),
-  nextStep: () => set((s) => ({ currentStep: Math.min(s.currentStep + 1, 4) })),
+  setClaimedProfile: (id, name = null) => set({ claimedProviderId: id, claimedProviderName: name }),
+  clearClaimedProfile: () => set({ claimedProviderId: null, claimedProviderName: null }),
+  nextStep: () => set((s) => ({ currentStep: Math.min(s.currentStep + 1, 5) })),
   prevStep: () => set((s) => ({ currentStep: Math.max(s.currentStep - 1, 0) })),
   setProfession: (profession) => set({ profession }),
   setSelectedSpecialtyIds: (ids) => set({ selectedSpecialtyIds: ids }),
@@ -176,7 +184,7 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   setIsComplete: (complete) => set({ isComplete: complete }),
 
   reset: () => set({
-    currentStep: 0, profession: null, selectedSpecialtyIds: [],
+    currentStep: 0, claimedProviderId: null, claimedProviderName: null, profession: null, selectedSpecialtyIds: [],
     personalInfo: initialPersonalInfo, organizationInfo: initialOrganizationInfo,
     address: initialAddress, facility: initialFacility, services: [],
     workingHours: defaultWorkingHours, verificationDocs: initialVerificationDocs,

@@ -40,7 +40,7 @@ const DOC_OPTIONS: DocOption[] = [
  * membership) and check the terms checkbox before final submission.
  */
 export function StepVerification() {
-  const { verificationDocs, setVerificationDocs, agreedToTerms, setAgreedToTerms } =
+  const { verificationDocs, setVerificationDocs, agreedToTerms, setAgreedToTerms, claimedProviderId, claimedProviderName } =
     useOnboardingStore();
   const [uploadingDoc, setUploadingDoc] = useState<DocKey | null>(null);
 
@@ -84,10 +84,14 @@ export function StepVerification() {
     >
       <View className="px-5">
         <Text className="text-center text-lg font-semibold tracking-[-0.3px] text-dark">
-          Documents de vérification
+          {claimedProviderId ? 'Vérification de la revendication' : 'Documents de vérification'}
         </Text>
         <Text className="mt-2 text-center text-sm font-medium text-grayText">
-          Téléchargez les documents requis pour vérifier votre compte.
+          {claimedProviderId ? (
+            <>Vous revendiquez Dr {claimedProviderName} — demande de revendication après vérification d&apos;identité.</>
+          ) : (
+            <>Téléchargez les documents requis pour vérifier votre compte — demande d&apos;ajout.</>
+          )}
         </Text>
 
         <View className="mt-6 gap-4">

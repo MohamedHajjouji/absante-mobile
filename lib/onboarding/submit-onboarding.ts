@@ -7,6 +7,7 @@ const PROFESSION_SLUG_MAP: Record<string, string> = {
 
 export interface OnboardingData {
   profession: string;
+  claimedProviderId?: string | null;
   personalInfo: { firstName: string; lastName: string; phone: string; whatsapp: string; gender: string; languages: string[]; biography: string; yearsOfExperience: number; licenseNumber: string; avatarUrl: string; };
   organizationInfo: { name: string; logoUrl: string; description: string; phone: string; whatsapp: string; website: string; };
   address: { region: string | null; city: string; streetAddress: string; postalCode: string | null; };
@@ -68,6 +69,119 @@ export async function submitOnboarding(data: OnboardingData) {
     professionId = newProfession?.id ?? null;
   }
 
+  // 4. Provider record: claim mode vs new-add mode.
+  // - Claim mode: reuse the unclaimed directory row, update it WITHOUT setting
+  //   profile_id (stays unregistered until admin approves), then file a
+  //   profile_claims request.
+  // - New mode: update the owned row if one already exists (profile_id unique),
+  //   else insert.
+  let providerId: string;
+  let isClaimMode = !!data.claimedProviderId;
+  const claimTargetId = data.claimedProviderId ?? null;
+  let hasOwnedLinks = false;
+
+  if (isClaimMode && claimTargetId) {
+    const { data: dirProvider } = await supabase
+      .from('providers')
+      .select('id, profile_id')
+      .eq('id', claimTargetId)
+      .maybeSingle();
+
+    if (!dirProvider) {
+      return { success: false, error: 'Profil annuaire introuvable' };
+    }
+    if ((dirProvider as any).profile_id && (dirProvider as any).profile_id !== userId) {
+      return { success: false, error: 'Ce profil a déjà été revendiqué' };
+    }
+
+    if ((dirProvider as any).profile_id === userId) {
+      // Already linked (claim previously approved) — update in place.
+      const { error: updateError } = await supabase
+        .from('providers')
+        .update({
+          profession_id: professionId,
+          biography: data.personalInfo.biography || null,
+          years_of_experience: data.personalInfo.yearsOfExperience,
+          license_number: data.personalInfo.licenseNumber || null,
+          gender: data.personalInfo.gender || null,
+          accepts_new_patients: true,
+          emergency_available: data.facility.emergencyServices,
+          same_day_appointments: false,
+          active: true,
+          onboarding_completed: true,
+          profile_completion_pct: 100,
+        })
+        .eq('id', claimTargetId);
+      if (updateError) return { success: false, error: updateError.message };
+      providerId = claimTargetId;
+      isClaimMode = false;
+    } else {
+      const { error: claimUpdateError } = await supabase
+        .from('providers')
+        .update({
+          profession_id: professionId,
+          biography: data.personalInfo.biography || null,
+          years_of_experience: data.personalInfo.yearsOfExperience,
+          license_number: data.personalInfo.licenseNumber || null,
+          gender: data.personalInfo.gender || null,
+          accepts_new_patients: true,
+          emergency_available: data.facility.emergencyServices,
+          same_day_appointments: false,
+          active: true,
+          onboarding_completed: false,
+          profile_completion_pct: 100,
+        })
+        .eq('id', claimTargetId);
+      if (claimUpdateError) return { success: false, error: claimUpdateError.message };
+      providerId = claimTargetId;
+
+      const { data: existingClaim } = await supabase
+        .from('profile_claims')
+        .select('id, status')
+        .eq('provider_id', claimTargetId)
+        .eq('profile_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!existingClaim || (existingClaim as any).status !== 'pending') {
+        const { error: claimError } = await supabase.from('profile_claims').insert({
+          provider_id: claimTargetId,
+          profile_id: userId,
+          license_input: data.personalInfo.licenseNumber?.trim() || null,
+          phone_input: data.personalInfo.phone?.trim() || null,
+          status: 'pending',
+        });
+        if (claimError) console.error('Failed to create claim request:', claimError.message);
+      }
+    }
+  } else {
+  const { data: existingProvider } = await supabase
+    .from('providers')
+    .select('id')
+    .eq('profile_id', userId)
+    .maybeSingle();
+
+  if (existingProvider) {
+    hasOwnedLinks = true;
+    const { error: updateError } = await supabase
+      .from('providers')
+      .update({
+        profession_id: professionId,
+        biography: data.personalInfo.biography || null,
+        years_of_experience: data.personalInfo.yearsOfExperience,
+        license_number: data.personalInfo.licenseNumber,
+        gender: data.personalInfo.gender || null,
+        accepts_new_patients: true,
+        emergency_available: data.facility.emergencyServices,
+        same_day_appointments: false,
+        active: true,
+        onboarding_completed: true,
+        profile_completion_pct: 100,
+      })
+      .eq('id', (existingProvider as any).id);
+    if (updateError) return { success: false, error: updateError.message };
+    providerId = (existingProvider as any).id;
+  } else {
   // 4. Insert the provider record
   const { data: provider, error: profError } = await supabase
     .from('providers')
@@ -93,11 +207,28 @@ export async function submitOnboarding(data: OnboardingData) {
     return { success: false, error: profError?.message ?? 'Failed to create provider profile' };
   }
 
-  const providerId = provider.id;
+  providerId = provider.id;
+  }
+  }
 
-  // 5. Create organization
-  let organizationId: string | null = null;
-  if (data.organizationInfo.name) {
+  // 4b. Owned / claimed rows may already own seeded pieces — reuse them.
+  let claimedOrgId: string | null = null;
+  let claimedFacilityId: string | null = null;
+  let claimedHasServices = false;
+  if (isClaimMode || hasOwnedLinks) {
+    const [{ data: orgLinks }, { data: facLinks }, { data: svcRows }] = await Promise.all([
+      supabase.from('provider_organizations').select('organization_id').eq('provider_id', providerId).limit(1),
+      supabase.from('provider_facilities').select('facility_id').eq('provider_id', providerId).limit(1),
+      supabase.from('provider_services').select('id').eq('provider_id', providerId).limit(1),
+    ]);
+    claimedOrgId = (orgLinks as any[])?.[0]?.organization_id ?? null;
+    claimedFacilityId = (facLinks as any[])?.[0]?.facility_id ?? null;
+    claimedHasServices = ((svcRows as any[]) ?? []).length > 0;
+  }
+
+  // 5. Create organization (claimed profiles keep their seeded org)
+  let organizationId: string | null = claimedOrgId;
+  if (data.organizationInfo.name && !claimedOrgId) {
     const slug = data.organizationInfo.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
     const { data: org, error: orgError } = await supabase
       .from('organizations')
@@ -137,10 +268,10 @@ export async function submitOnboarding(data: OnboardingData) {
     if (!addrError) addressId = addr.id;
   }
 
-  // 7. Create facility
-  let facilityId: string | null = null;
+  // 7. Create facility (claimed profiles keep their seeded cabinet)
+  let facilityId: string | null = claimedFacilityId;
   const facilityName = data.facility.name || data.organizationInfo.name;
-  if (facilityName && organizationId) {
+  if (facilityName && organizationId && !claimedFacilityId) {
     const { data: facility, error: facError } = await supabase
       .from('facilities')
       .insert({
@@ -160,9 +291,10 @@ export async function submitOnboarding(data: OnboardingData) {
     }
   }
 
-  // 8. Insert provider services (values must match service_type_enum /
+  // 8. Insert provider services (claimed profiles keep seeded services
+  // when they already exist)
   // booking_mode_enum or the insert fails)
-  if (data.services.length > 0) {
+  if (data.services.length > 0 && !claimedHasServices) {
     const servicesPayload = data.services.map((svc) => ({
       provider_id: providerId, name: svc.name, description: svc.description || null,
       service_type: svc.serviceType, booking_mode: svc.bookingMode,

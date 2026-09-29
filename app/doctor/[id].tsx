@@ -155,12 +155,45 @@ export default function DoctorDetailScreen() {
 
           {/* Verified badge */}
           <View className="mt-2 flex-row items-center gap-1.5">
-            <Ionicons name="shield-checkmark" size={14} color="#0D61B6" />
+            <Ionicons
+              name={provider.isRegistered ? 'shield-checkmark' : 'information-circle-outline'}
+              size={14}
+              color={provider.isRegistered ? '#0D61B6' : '#B7791F'}
+            />
             <Text className="text-xs font-medium text-secondary-tone">
-              Médecin vérifié
+              {provider.isRegistered ? 'Médecin vérifié' : 'Profil non revendiqué'}
             </Text>
           </View>
         </View>
+
+        {/* Claim banner for unclaimed directory profiles */}
+        {!provider.isRegistered && (
+          <View className="mx-5 mt-6 rounded-panel border border-amber-200 bg-amber-50 p-4">
+            <View className="flex-row items-start gap-3">
+              <Ionicons name="checkmark-circle-outline" size={20} color="#B7791F" />
+              <View className="flex-1">
+                <Text className="text-sm font-semibold text-dark">
+                  C&apos;est vous, Dr {provider.firstName} {provider.lastName} ?
+                </Text>
+                <Text className="mt-1 text-xs leading-4 text-grayText">
+                  Revendiquez ce profil pour corriger vos informations et activer la
+                  réservation en ligne.
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              className="mt-3 rounded-lg bg-dark py-3"
+              activeOpacity={0.8}
+              onPress={() => router.push('/(onboarding)/professional')}
+              accessibilityRole="button"
+              accessibilityLabel="Revendiquer ce profil professionnel"
+            >
+              <Text className="text-center text-sm font-semibold text-white">
+                Revendiquer ce profil
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Stats Row */}
         <View className="mx-5 mt-6 flex-row gap-3">
@@ -276,13 +309,30 @@ export default function DoctorDetailScreen() {
                     </View>
                   </View>
                   <TouchableOpacity
-                    className="mt-3 rounded-lg bg-primary py-2.5"
-                    activeOpacity={0.8}
-                    onPress={() =>
-                      router.push(`/booking/${provider.id}?serviceId=${s.id}`)
+                    className={
+                      provider.isRegistered
+                        ? 'mt-3 rounded-lg bg-primary py-2.5'
+                        : 'mt-3 rounded-lg bg-slate-200 py-2.5'
                     }
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      if (!provider.isRegistered) {
+                        Alert.alert(
+                          'Réservation bientôt disponible',
+                          "Ce praticien n'a pas encore activé la réservation en ligne."
+                        );
+                        return;
+                      }
+                      router.push(`/booking/${provider.id}?serviceId=${s.id}`);
+                    }}
                   >
-                    <Text className="text-center text-sm font-medium text-white">
+                    <Text
+                      className={
+                        provider.isRegistered
+                          ? 'text-center text-sm font-medium text-white'
+                          : 'text-center text-sm font-medium text-grayText'
+                      }
+                    >
                       Réserver
                     </Text>
                   </TouchableOpacity>

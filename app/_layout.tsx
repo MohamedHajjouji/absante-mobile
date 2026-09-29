@@ -34,8 +34,8 @@ function RootContent() {
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="(professional)" />
       <Stack.Screen name="(erp)" />
-      <Stack.Screen name="doctor" />
-      <Stack.Screen name="booking" />
+      <Stack.Screen name="doctor/[id]" />
+      <Stack.Screen name="booking/[providerId]" />
       <Stack.Screen name="+not-found" />
     </Stack>
   );

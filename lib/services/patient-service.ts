@@ -29,6 +29,7 @@ export interface SearchResultProvider {
   yearsOfExperience: number | null;
   city: string | null;
   acceptsNewPatients: boolean;
+  isRegistered: boolean;
 }
 
 export interface ProviderDetail {
@@ -45,6 +46,7 @@ export interface ProviderDetail {
   licenseNumber: string | null;
   city: string | null;
   facilities: { id: string; name: string; city: string }[];
+  isRegistered: boolean;
 }
 
 export interface ProviderServiceItem {
@@ -250,6 +252,9 @@ export async function searchProviders(params: {
     .from('providers')
     .select(
       `id,
+       profile_id,
+       first_name,
+       last_name,
        average_rating,
        review_count,
        years_of_experience,
@@ -259,7 +264,6 @@ export async function searchProviders(params: {
        provider_facilities(facility:facilities(name, address:addresses(city)))`
     )
     .eq('active', true)
-    .eq('onboarding_completed', true)
     .order('average_rating', { ascending: false })
     .limit(params.limit ?? 50);
 
@@ -281,8 +285,8 @@ export async function searchProviders(params: {
 
     return {
       id: p.id,
-      firstName: profile?.first_name ?? '',
-      lastName: profile?.last_name ?? '',
+      firstName: profile?.first_name ?? p.first_name ?? '',
+      lastName: profile?.last_name ?? p.last_name ?? '',
       avatarUrl: profile?.avatar_url ?? null,
       specialty: profession?.name_fr ?? 'Professionnel',
       rating: Number(p.average_rating ?? 0),
@@ -290,6 +294,7 @@ export async function searchProviders(params: {
       yearsOfExperience: p.years_of_experience ?? null,
       city: facilityList[0]?.city ?? null,
       acceptsNewPatients: !!p.accepts_new_patients,
+      isRegistered: p.profile_id != null,
     };
   });
 
@@ -306,6 +311,49 @@ export async function searchProviders(params: {
   return results;
 }
 
+// ── Unclaimed directory lookup (onboarding identity check + claim flow) ──
+
+export interface DirectoryHit {
+  id: string;
+  firstName: string;
+  lastName: string;
+  specialty: string | null;
+  city: string | null;
+}
+
+export async function searchUnclaimedDoctors(query: string): Promise<DirectoryHit[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  const { data, error } = await supabase
+    .from('providers')
+    .select(
+      `id,
+       first_name,
+       last_name,
+       profession:profession_id(name_fr),
+       provider_facilities(facility:facilities(address:addresses(city)))`
+    )
+    .is('profile_id', null)
+    .eq('active', true)
+    .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%`)
+    .limit(10);
+  if (error || !data) return [];
+  return (data as any[]).map((p) => {
+    const profession = unwrap(p.profession) as any;
+    const facList = (p.provider_facilities || [])
+      .map((pf: any) => unwrap(pf.facility) as any)
+      .filter(Boolean);
+    const addr = facList.length > 0 ? (unwrap(facList[0]?.address) as any) : null;
+    return {
+      id: p.id,
+      firstName: p.first_name ?? '',
+      lastName: p.last_name ?? '',
+      specialty: profession?.name_fr ?? null,
+      city: addr?.city ?? null,
+    } as DirectoryHit;
+  });
+}
+
 // ── Provider Detail ─────────────────────────────────────────
 
 export async function getProviderDetail(
@@ -315,6 +363,9 @@ export async function getProviderDetail(
     .from('providers')
     .select(
       `id,
+       profile_id,
+       first_name,
+       last_name,
        average_rating,
        review_count,
        years_of_experience,
@@ -341,8 +392,8 @@ export async function getProviderDetail(
 
   return {
     id: p.id,
-    firstName: profile?.first_name ?? '',
-    lastName: profile?.last_name ?? '',
+    firstName: profile?.first_name ?? p.first_name ?? '',
+    lastName: profile?.last_name ?? p.last_name ?? '',
     avatarUrl: profile?.avatar_url ?? null,
     specialty: profession?.name_fr ?? 'Professionnel',
     rating: Number(p.average_rating ?? 0),
@@ -353,6 +404,7 @@ export async function getProviderDetail(
     licenseNumber: p.license_number ?? null,
     city: facilities[0]?.city ?? null,
     facilities,
+    isRegistered: p.profile_id != null,
   };
 }
 
