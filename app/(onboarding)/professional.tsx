@@ -33,7 +33,7 @@ export default function ProfessionalOnboardingScreen() {
       case 0: return true; // identity check is optional — claim or new
       case 1: return profession != null;
       case 2: return !!personalInfo.firstName && !!personalInfo.lastName && !!personalInfo.phone;
-      case 3: return !!organizationInfo.name && !!address.city && !!address.streetAddress;
+      case 3: return !!organizationInfo.name && !!address.city && !!address.city_id && !!address.streetAddress;
       case 4: return services.length > 0;
       case 5: return agreedToTerms;
       default: return true;

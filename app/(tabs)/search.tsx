@@ -15,8 +15,11 @@ import { useRouter } from 'expo-router';
 import {
   searchProviders,
   getProfessions,
+  getProviderPins,
   SearchResultProvider,
+  ProviderPin,
 } from '@/lib/services/patient-service';
+import { DoctorMap } from '@/components/map/DoctorMap';
 
 /** Lowercase + strip accents so "Médecin" matches "medecin". */
 function normalizeName(s: string): string {
@@ -42,6 +45,7 @@ export default function SearchScreen() {
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [results, setResults] = useState<SearchResultProvider[]>([]);
   const [loading, setLoading] = useState(false);
+  const [pins, setPins] = useState<ProviderPin[]>([]);
 
   // Load professions, then pre-select the Médecin category when present.
   // Falls back to "Tous" (all doctors) when no such category exists.
@@ -87,6 +91,23 @@ export default function SearchScreen() {
     }, 300);
     return () => clearTimeout(timer);
   }, [query, activeFilter, professions, doSearch]);
+
+  // Map pins for the visible results (only cabinets with picked locations).
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const p = await getProviderPins(results.map((r) => r.id));
+        if (active) setPins(p);
+      } catch (e) {
+        console.error('Failed to load pins:', e);
+        if (active) setPins([]);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [results]);
 
   return (
     <SafeAreaView className="flex-1 bg-pageBg" edges={['top']}>
@@ -148,6 +169,23 @@ export default function SearchScreen() {
 
             {/* Results */}
             <View className="mt-6 px-5">
+              {pins.length > 0 && (
+                <View className="mb-4 overflow-hidden rounded-panel border border-hairline bg-white shadow-panel">
+                  <DoctorMap
+                    key={pins.map((p) => p.provider_id).join(',')}
+                    pins={pins.map((p) => ({
+                      lat: p.lat,
+                      lng: p.lng,
+                      title: p.name,
+                      description: p.city ?? undefined,
+                    }))}
+                    height={220}
+                  />
+                  <Text className="px-4 py-2.5 text-xs text-grayText">
+                    {pins.length} lieu{pins.length > 1 ? 'x' : ''} sur la carte
+                  </Text>
+                </View>
+              )}
               {results.length > 0 ? (
                 <>
                   <View className="flex-row items-center justify-between">

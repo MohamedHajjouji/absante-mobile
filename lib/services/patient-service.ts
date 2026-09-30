@@ -45,7 +45,7 @@ export interface ProviderDetail {
   acceptsNewPatients: boolean;
   licenseNumber: string | null;
   city: string | null;
-  facilities: { id: string; name: string; city: string }[];
+  facilities: { id: string; name: string; city: string; lat: number | null; lng: number | null }[];
   isRegistered: boolean;
 }
 
@@ -311,6 +311,66 @@ export async function searchProviders(params: {
   return results;
 }
 
+// ── Provider map pins (search map + profile maps) ─────────────
+
+export interface ProviderPin {
+  provider_id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  city: string | null;
+}
+
+export async function getProviderPins(providerIds: string[]): Promise<ProviderPin[]> {
+  const ids = providerIds.filter(Boolean).slice(0, 50);
+  if (ids.length === 0) return [];
+
+  const { data: providers } = await supabase
+    .from('providers')
+    .select('id, first_name, last_name')
+    .in('id', ids);
+
+  const names = new Map<string, string>();
+  for (const p of (providers ?? []) as { id: string; first_name: string | null; last_name: string | null }[]) {
+    names.set(p.id, `Dr. ${(p.first_name ?? '').trim()} ${(p.last_name ?? '').trim()}`.trim());
+  }
+
+  interface PinAddress {
+    city: string | null;
+    latitude: number | string | null;
+    longitude: number | string | null;
+  }
+  interface PinFacility {
+    active: boolean | null;
+    address: PinAddress | PinAddress[] | null;
+  }
+  interface PinLink {
+    provider_id: string;
+    facility: PinFacility | PinFacility[] | null;
+  }
+
+  const { data: links } = await supabase
+    .from('provider_facilities')
+    .select('provider_id, facility:facilities(active, address:addresses(city, latitude, longitude))')
+    .in('provider_id', ids);
+
+  const pins: ProviderPin[] = [];
+  for (const l of (links ?? []) as PinLink[]) {
+    const fac = Array.isArray(l.facility) ? l.facility[0] : l.facility;
+    if (!fac || fac.active === false) continue;
+    const addr = fac.address ? (Array.isArray(fac.address) ? fac.address[0] : fac.address) : null;
+    if (addr?.latitude == null || addr?.longitude == null) continue;
+    pins.push({
+      provider_id: l.provider_id,
+      name: names.get(l.provider_id) ?? 'Cabinet',
+      lat: Number(addr.latitude),
+      lng: Number(addr.longitude),
+      city: addr.city ?? null,
+    });
+  }
+  return pins;
+}
+
 // ── Unclaimed directory lookup (onboarding identity check + claim flow) ──
 
 export interface DirectoryHit {
@@ -374,7 +434,7 @@ export async function getProviderDetail(
        license_number,
        profile:profile_id(first_name, last_name, avatar_url),
        profession:profession_id(name_fr),
-       provider_facilities(facility:facilities(id, name, address:addresses(city)))`
+       provider_facilities(facility:facilities(id, name, address:addresses(city, latitude, longitude)))`
     )
     .eq('id', providerId)
     .single();
@@ -387,7 +447,13 @@ export async function getProviderDetail(
   const facilities = (p.provider_facilities || []).map((pf: any) => {
     const f = unwrap(pf.facility) as any;
     const addr = unwrap(f?.address) as any;
-    return { id: f?.id ?? '', name: f?.name ?? '', city: addr?.city ?? '' };
+    return {
+      id: f?.id ?? '',
+      name: f?.name ?? '',
+      city: addr?.city ?? '',
+      lat: addr?.latitude ?? null,
+      lng: addr?.longitude ?? null,
+    };
   });
 
   return {

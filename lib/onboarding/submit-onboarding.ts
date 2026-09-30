@@ -10,7 +10,7 @@ export interface OnboardingData {
   claimedProviderId?: string | null;
   personalInfo: { firstName: string; lastName: string; phone: string; whatsapp: string; gender: string; languages: string[]; biography: string; yearsOfExperience: number; licenseNumber: string; avatarUrl: string; };
   organizationInfo: { name: string; logoUrl: string; description: string; phone: string; whatsapp: string; website: string; };
-  address: { region: string | null; city: string; streetAddress: string; postalCode: string | null; };
+  address: { region: string | null; city: string; city_id?: string | null; streetAddress: string; postalCode: string | null; latitude?: number | null; longitude?: number | null; };
   facility: { name: string | null; phone: string | null; parkingAvailable: boolean; wheelchairAccessible: boolean; emergencyServices: boolean; };
   services: Array<{ name: string; description: string | null; serviceType: string; bookingMode: string; durationMinutes: number; price: number; }>;
   workingHours: Array<{ weekday: string; startTime: string; endTime: string; }>;
@@ -261,8 +261,11 @@ export async function submitOnboarding(data: OnboardingData) {
       .from('addresses')
       .insert({
         country: 'Morocco', region: data.address.region || null,
-        city: data.address.city, postal_code: data.address.postalCode || null,
+        city: data.address.city, city_id: data.address.city_id || null,
+        postal_code: data.address.postalCode || null,
         street_address: data.address.streetAddress,
+        latitude: data.address.latitude ?? null,
+        longitude: data.address.longitude ?? null,
       })
       .select('id').single();
     if (!addrError) addressId = addr.id;

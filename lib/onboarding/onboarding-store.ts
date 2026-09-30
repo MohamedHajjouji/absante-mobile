@@ -36,6 +36,9 @@ export interface AddressInfo {
   streetAddress: string;
   postalCode: string;
   city_id?: string;
+  /** Picked on the map (optional — onboarding never blocks on it). */
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface FacilityInfo {
@@ -124,7 +127,7 @@ const initialOrganizationInfo: OrganizationInfo = {
 };
 
 const initialAddress: AddressInfo = {
-  region: '', city: '', streetAddress: '', postalCode: '',
+  region: '', city: '', streetAddress: '', postalCode: '', latitude: null, longitude: null,
 };
 
 const initialFacility: FacilityInfo = {

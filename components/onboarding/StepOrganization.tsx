@@ -1,5 +1,8 @@
 import { View, Text, ScrollView, Pressable } from 'react-native';
+import { useState } from 'react';
 import { FormInput } from '@/components/ui/FormInput';
+import { CityPicker, type MobileCity } from '@/components/onboarding/CityPicker';
+import { MapPickerField } from '@/components/onboarding/MapPickerField';
 import { useOnboardingStore } from '@/lib/onboarding/onboarding-store';
 
 type ToggleProps = {
@@ -38,6 +41,17 @@ export function StepOrganization() {
   const setOrganizationInfo = useOnboardingStore((s) => s.setOrganizationInfo);
   const setAddress = useOnboardingStore((s) => s.setAddress);
   const setFacility = useOnboardingStore((s) => s.setFacility);
+
+  // City picked in the dropdown — the map opens centered on it.
+  const [cityCenter, setCityCenter] = useState<{ lat: number; lng: number } | null>(null);
+
+  function handleCityPick(c: MobileCity) {
+    // New city → old pin is stale, pick again on the map.
+    setAddress({ city: c.name_fr, city_id: c.id, region: c.region, latitude: null, longitude: null });
+    setCityCenter(
+      c.latitude != null && c.longitude != null ? { lat: c.latitude, lng: c.longitude } : null
+    );
+  }
 
   return (
     <ScrollView
@@ -94,13 +108,30 @@ export function StepOrganization() {
         <Text className="mb-3 mt-4 text-sm font-semibold text-dark">
           Adresse
         </Text>
-        <FormInput
-          label="Ville"
-          placeholder="..."
-          iconName="location"
+        <CityPicker
           value={address.city}
-          onChangeText={(v) => setAddress({ city: v })}
+          hasSelection={!!address.city_id}
+          onPick={handleCityPick}
+          onText={(t) =>
+            setAddress(t.trim() === '' ? { city: '', city_id: '' } : { city: t, city_id: '' })
+          }
         />
+        {!!address.city_id && (
+          <View className="mb-4">
+            <Text className="mb-1.5 text-sm font-medium text-dark">
+              Emplacement sur la carte <Text className="font-normal text-grayText">(optionnel)</Text>
+            </Text>
+            <MapPickerField
+              center={cityCenter}
+              value={
+                address.latitude != null && address.longitude != null
+                  ? { lat: address.latitude, lng: address.longitude }
+                  : null
+              }
+              onChange={(v) => setAddress({ latitude: v.lat, longitude: v.lng })}
+            />
+          </View>
+        )}
         <FormInput
           label="Rue / Adresse"
           placeholder="..."

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -9,6 +9,7 @@ import {
   ProviderDetail,
   ProviderServiceItem,
 } from '@/lib/services/patient-service';
+import { DoctorMap } from '@/components/map/DoctorMap';
 
 const SPECIALTY_META: Record<string, { icon: keyof typeof Ionicons.glyphMap; color: string; bg: string }> = {
   Cardiologue: { icon: 'heart', color: '#F53E8A', bg: '#fdf2f8' },
@@ -139,12 +140,26 @@ export default function DoctorDetailScreen() {
 
         {/* Provider Hero */}
         <View className="mt-6 items-center px-5">
-          <View
-            className="h-24 w-24 items-center justify-center rounded-full"
-            style={{ backgroundColor: meta.bg }}
-          >
-            <Ionicons name={meta.icon} size={44} color={meta.color} />
-          </View>
+          {provider.avatarUrl ? (
+            <Image
+              source={{ uri: provider.avatarUrl }}
+              className="h-24 w-24 rounded-full"
+              accessibilityLabel={`Photo de Dr ${provider.firstName} ${provider.lastName}`}
+            />
+          ) : (
+            <View
+              className="h-24 w-24 items-center justify-center rounded-full"
+              style={{ backgroundColor: meta.bg }}
+            >
+              {`${provider.firstName?.[0] ?? ''}${provider.lastName?.[0] ?? ''}`.toUpperCase() ? (
+                <Text className="text-3xl font-bold" style={{ color: meta.color }}>
+                  {`${provider.firstName?.[0] ?? ''}${provider.lastName?.[0] ?? ''}`.toUpperCase()}
+                </Text>
+              ) : (
+                <Ionicons name={meta.icon} size={44} color={meta.color} />
+              )}
+            </View>
+          )}
 
           <Text className="mt-4 text-2xl font-semibold tracking-[-0.3px] text-dark">
             Dr {provider.firstName} {provider.lastName}
@@ -243,6 +258,25 @@ export default function DoctorDetailScreen() {
             <Text className="text-[18px] font-medium tracking-[-0.3px] text-dark">
               Lieux de consultation
             </Text>
+            {(provider.facilities ?? []).some((f) => f.lat != null && f.lng != null) ? (
+              <View className="mt-3 overflow-hidden rounded-panel border border-hairline">
+                <DoctorMap
+                  key={(provider.facilities ?? [])
+                    .filter((f) => f.lat != null && f.lng != null)
+                    .map((f) => f.id)
+                    .join(',')}
+                  pins={(provider.facilities ?? [])
+                    .filter((f) => f.lat != null && f.lng != null)
+                    .map((f) => ({
+                      lat: f.lat as number,
+                      lng: f.lng as number,
+                      title: f.name,
+                      description: f.city || undefined,
+                    }))}
+                  height={220}
+                />
+              </View>
+            ) : null}
             {((provider.facilities ?? [])).map((f) => (
               <View
                 key={f.id}
