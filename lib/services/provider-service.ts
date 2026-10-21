@@ -84,6 +84,7 @@ export async function getProviderProfile(userId: string): Promise<ProviderProfil
       license_number,
       biography,
       profession:profession_id(name_fr),
+      provider_specialties(specialty:specialty_id(name_fr)),
       profile:profile_id(first_name, last_name, email, phone, avatar_url)
     `)
     .eq('profile_id', userId)
@@ -93,6 +94,9 @@ export async function getProviderProfile(userId: string): Promise<ProviderProfil
 
   const p = provider as any;
   const profile = p.profile ?? {};
+  const specList = (p.provider_specialties || [])
+    .map((ps: any) => (Array.isArray(ps.specialty) ? ps.specialty[0] : ps.specialty))
+    .filter(Boolean);
   return {
     id: p.id,
     firstName: profile.first_name ?? '',
@@ -100,7 +104,7 @@ export async function getProviderProfile(userId: string): Promise<ProviderProfil
     email: profile.email ?? '',
     phone: profile.phone ?? null,
     avatarUrl: profile.avatar_url ?? null,
-    specialty: p.profession?.name_fr ?? 'Professionnel de santé',
+    specialty: specList[0]?.name_fr ?? p.profession?.name_fr ?? 'Professionnel de santé',
     verifiedStatus: p.verified_status ?? 'pending',
     onboardingComplete: !!p.onboarding_completed,
     acceptsNewPatients: p.accepts_new_patients ?? true,
@@ -244,17 +248,22 @@ export async function getDashboard(providerId: string): Promise<DashboardData> {
     }
   }
 
-  const { count } = await supabase
-    .from('patients')
-    .select('id', { count: 'exact', head: true })
-    .eq('provider_id', providerId);
+  // Same union as the Patients tab (linked rows + appointment patients)
+  // so the home counter and the tab can never disagree.
+  const [linkedPatients] = await Promise.all([
+    getProviderLinkedPatients(providerId),
+  ]);
+  const patientIds = new Set<string>(linkedPatients.map((p) => p.id));
+  for (const a of appointments) {
+    if (a.patientId) patientIds.add(a.patientId);
+  }
 
   return {
     todayAppointments,
     upcomingAppointments,
     stats: {
       todayCount: todayAppointments.length,
-      totalPatients: count ?? 0,
+      totalPatients: patientIds.size,
       revenue,
       todayRevenue,
     },
@@ -320,6 +329,83 @@ export async function createAppointment(params: {
 
 
 // ── Patients ────────────────────────────────────────────────
+
+export async function getProviderLinkedPatients(providerId: string): Promise<PatientSum[]> {
+  const { data } = await supabase
+    .from('patients')
+    .select('id, first_name, last_name, phone, email, avatar_url')
+    .eq('provider_id', providerId)
+    .order('created_at', { ascending: false });
+
+  if (!data) return [];
+
+  return (data as any[]).map((p) => ({
+    id: p.id,
+    firstName: p.first_name ?? null,
+    lastName: p.last_name ?? null,
+    phone: p.phone ?? null,
+    email: p.email ?? null,
+    avatarUrl: p.avatar_url ?? null,
+  }));
+}
+
+/**
+ * Every patient of this provider, whatever created the link: booked
+ * appointments AND directly-linked rows (dossier created, claimed, ...).
+ * Home stats and the Patients tab must agree — both use this union.
+ */
+export async function getProviderAllPatients(providerId: string): Promise<PatientSum[]> {
+  const [fromAppointments, linked] = await Promise.all([
+    getProviderPatients(providerId),
+    getProviderLinkedPatients(providerId),
+  ]);
+  const map = new Map<string, PatientSum>();
+  for (const p of [...fromAppointments, ...linked]) {
+    if (p?.id && !map.has(p.id)) map.set(p.id, p);
+  }
+  return Array.from(map.values());
+}
+
+/**
+ * Create a dossier-less patient row for this provider (the patient will get a
+ * real account when they sign up with the same email). Mirrors the web
+ * dashboard's createPatient: demographics on the patients row itself with
+ * profile_id null until a signup claims it.
+ */
+export async function createProviderPatient(
+  providerId: string,
+  data: { firstName: string; lastName: string; phone?: string; email?: string }
+): Promise<{ success: boolean; patient?: PatientSum; error?: string }> {
+  if (!data.firstName.trim() || !data.lastName.trim()) {
+    return { success: false, error: 'Nom et prénom obligatoires.' };
+  }
+
+  const { data: row, error } = await supabase
+    .from('patients')
+    .insert({
+      provider_id: providerId,
+      first_name: data.firstName.trim(),
+      last_name: data.lastName.trim(),
+      phone: data.phone?.trim() || null,
+      email: data.email?.trim().toLowerCase() || null,
+    })
+    .select('id, first_name, last_name, phone, email, avatar_url')
+    .single();
+
+  if (error || !row) return { success: false, error: error?.message ?? 'Création impossible.' };
+
+  return {
+    success: true,
+    patient: {
+      id: row.id,
+      firstName: row.first_name ?? null,
+      lastName: row.last_name ?? null,
+      phone: row.phone ?? null,
+      email: row.email ?? null,
+      avatarUrl: row.avatar_url ?? null,
+    },
+  };
+}
 
 export async function getProviderPatients(providerId: string): Promise<PatientSum[]> {
   const { data: appts } = await supabase

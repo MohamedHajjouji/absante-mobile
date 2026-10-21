@@ -17,6 +17,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { signOut } from '@/lib/services/auth-service';
 import { SwitchPill } from '@/components/ui/SwitchPill';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 import {
   getProviderProfile,
   setAvailability,
@@ -33,18 +34,6 @@ const VERIFICATION: Record<
     color: '#10B981',
     tint: 'bg-success-50',
     icon: 'shield-checkmark',
-  },
-  rejected: {
-    label: 'Validation refusée',
-    color: '#EF4444',
-    tint: 'bg-red-50',
-    icon: 'alert-circle',
-  },
-  pending: {
-    label: 'Validation en cours',
-    color: '#F59E0B',
-    tint: 'bg-warning-50',
-    icon: 'time',
   },
 };
 
@@ -174,12 +163,11 @@ export default function ProfessionalProfileScreen() {
                 className="h-24 w-24 rounded-full bg-primary-50"
                 style={{ borderWidth: 3, borderColor: '#FFFFFF' }}
               />
-              <View
-                className="absolute -bottom-1 -right-1 h-8 w-8 items-center justify-center rounded-full border-2 border-white"
-                style={{ backgroundColor: verification.color }}
-              >
-                <Ionicons name={verification.icon} size={14} color="#FFFFFF" />
-              </View>
+              {profile?.verifiedStatus === 'approved' && (
+                <View className="absolute -bottom-1 -right-1 h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-green-500">
+                  <Ionicons name="shield-checkmark" size={14} color="#FFFFFF" />
+                </View>
+              )}
             </View>
             <Text className="mt-4 text-2xl font-semibold tracking-[-0.3px] text-dark">
               {fullName}
@@ -187,15 +175,14 @@ export default function ProfessionalProfileScreen() {
             <Text className="mt-1 text-sm font-medium text-grayText">
               {profile?.specialty || 'Professionnel de santé'}
             </Text>
-            <View className={`mt-3 flex-row items-center rounded-full px-3 py-1.5 ${verification.tint}`}>
-              <Ionicons name={verification.icon} size={14} color={verification.color} />
-              <Text
-                className="ml-1.5 text-xs font-medium"
-                style={{ color: verification.color }}
-              >
-                {verification.label}
-              </Text>
-            </View>
+            {profile?.verifiedStatus === 'approved' && (
+              <View className="mt-3 flex-row items-center rounded-full bg-success-50 px-3 py-1.5">
+                <Ionicons name="shield-checkmark" size={14} color="#10B981" />
+                <Text className="ml-1.5 text-xs font-medium text-green-700">
+                  Compte vérifié
+                </Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -276,8 +263,19 @@ export default function ProfessionalProfileScreen() {
           ) : null}
         </View>
 
+        {/* Language — parity with patient profile + web */}
+        <View className="mx-5 mt-8 flex-row items-center justify-between rounded-panel border-hairline bg-white p-4 shadow-panel">
+          <View className="flex-row items-center">
+            <View className="h-11 w-11 items-center justify-center rounded-full bg-secondary-tone-50">
+              <Ionicons name="globe" size={20} color="#0D61B6" />
+            </View>
+            <Text className="ml-3 text-sm font-medium text-dark">Langue</Text>
+          </View>
+          <LanguageSwitcher />
+        </View>
+
         {/* Availability */}
-        <View className="mx-5 mt-8 flex-row items-center rounded-panel border-hairline bg-white p-4 shadow-panel">
+        <View className="mx-5 mt-4 flex-row items-center rounded-panel border-hairline bg-white p-4 shadow-panel">
           <View
             className={`h-11 w-11 items-center justify-center rounded-full ${
               profile?.acceptsNewPatients ? 'bg-success-50' : 'bg-softCloud'

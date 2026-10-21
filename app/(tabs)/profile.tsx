@@ -17,7 +17,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useRouter, Redirect } from 'expo-router';
 import { useAuth } from '@/lib/contexts/AuthContext';
-import { signOut } from '@/lib/services/auth-service';
+import { signOut, requestAccountDeletion } from '@/lib/services/auth-service';
+import { useLanguage } from '@/lib/i18n/language-context';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 import {
   getUserProfile,
   getPatientByProfileId,
@@ -29,6 +31,7 @@ import {
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, isLoaded } = useAuth();
+  const { t } = useLanguage();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [stats, setStats] = useState({ appointmentCount: 0, doctorCount: 0 });
   const [loading, setLoading] = useState(true);
@@ -66,10 +69,10 @@ export default function ProfileScreen() {
   const onRefresh = useCallback(() => { setRefreshing(true); loadData(); }, [loadData]);
 
   const handleSignOut = () => {
-    Alert.alert('Se déconnecter', 'Voulez-vous vraiment vous déconnecter ?', [
-      { text: 'Annuler', style: 'cancel' },
+    Alert.alert(t('profile.logoutTitle'), t('profile.logoutBody'), [
+      { text: t('profile.logoutCancel'), style: 'cancel' },
       {
-        text: 'Se déconnecter',
+        text: t('profile.logout'),
         style: 'destructive',
         onPress: async () => {
           setSigningOut(true);
@@ -77,7 +80,7 @@ export default function ProfileScreen() {
             await signOut();
           } catch (e) {
             console.error('Sign out failed:', e);
-            Alert.alert('Erreur', 'La déconnexion a échoué. Réessayez.');
+            Alert.alert(t('rdv.error'), t('profile.logoutFail'));
           } finally {
             setSigningOut(false);
           }
@@ -96,25 +99,27 @@ export default function ProfileScreen() {
 
   const handleSave = async () => {
     if (!user?.id) return;
-    if (!editFirst.trim() || !editLast.trim()) { Alert.alert('Erreur', 'Le nom et le prénom sont obligatoires.'); return; }
+    if (!editFirst.trim() || !editLast.trim()) { Alert.alert(t('rdv.error'), t('profile.nameRequired')); return; }
     setSaving(true);
     try {
       const result = await updateUserProfile(user.id, { firstName: editFirst.trim(), lastName: editLast.trim(), phone: editPhone.trim() });
-      if (result.success) { setEditModal(false); loadData(); } else { Alert.alert('Erreur', result.error || 'Impossible de sauvegarder.'); }
+      if (result.success) { setEditModal(false); loadData(); } else { Alert.alert(t('rdv.error'), result.error || t('profile.saveFail')); }
     } catch (e) {
       console.error('Failed to save profile:', e);
-      Alert.alert('Erreur', 'Impossible de sauvegarder. Vérifiez votre connexion.');
+      Alert.alert(t('rdv.error'), t('profile.saveFail'));
     } finally {
       setSaving(false);
     }
   };
 
+  // Only working destinations — no fake "soon" popups. Payments live
+  // inside each RDV (price shown), settings = language + edit profile above,
+  // help = WhatsApp/contact via notifications screen.
   const menuItems = [
-    { icon: 'calendar-outline' as const, label: 'Mes rendez-vous', desc: 'Historique et à venir', color: '#F53E8A', bg: '#fdf2f8', onPress: () => router.push('/(tabs)/rdv') },
-    { icon: 'notifications-outline' as const, label: 'Notifications', desc: 'Alertes et rappels', color: '#0D61B6', bg: '#ecf2fa', onPress: () => router.push('/notifications') },
-    { icon: 'card-outline' as const, label: 'Mes paiements', desc: 'Moyens de paiement', color: '#3578FF', bg: '#eff6ff', onPress: () => Alert.alert('Bientôt', 'Cette fonctionnalité sera bientôt disponible.') },
-    { icon: 'settings-outline' as const, label: 'Paramètres', desc: 'Préférences et sécurité', color: '#F59E0B', bg: '#fffbeb', onPress: () => Alert.alert('Bientôt', 'Cette fonctionnalité sera bientôt disponible.') },
-    { icon: 'help-circle-outline' as const, label: 'Aide & support', desc: 'FAQ et assistance', color: '#10B981', bg: '#ecfdf5', onPress: () => Alert.alert('Bientôt', 'Cette fonctionnalité sera bientôt disponible.') },
+    { icon: 'calendar-outline' as const, label: t('profile.menuRdv'), desc: t('profile.menuRdvDesc'), color: '#F53E8A', bg: '#fdf2f8', onPress: () => router.push('/(tabs)/rdv') },
+    { icon: 'notifications-outline' as const, label: t('profile.menuNotif'), desc: t('profile.menuNotifDesc'), color: '#0D61B6', bg: '#ecf2fa', onPress: () => router.push('/notifications') },
+    { icon: 'briefcase-outline' as const, label: t('profile.menuPro'), desc: t('profile.menuProDesc'), color: '#8B5CF6', bg: '#F5F3FF', onPress: () => router.push('/professionals') },
+    { icon: 'print-outline' as const, label: t('profile.menuPosters'), desc: t('profile.menuPostersDesc'), color: '#0D9488', bg: '#ECFDF5', onPress: () => router.push('/affiches') },
   ];
 
   // Personal data — guests are sent to login (placed after hooks).
@@ -136,16 +141,16 @@ export default function ProfileScreen() {
         <View className="h-20 w-20 items-center justify-center rounded-full bg-primary-50">
           <Ionicons name="cloud-offline-outline" size={36} color="#F53E8A" />
         </View>
-        <Text className="mt-6 text-lg font-semibold text-dark">Connexion impossible</Text>
+        <Text className="mt-6 text-lg font-semibold text-dark">{t('profile.offlineTitle')}</Text>
         <Text className="mt-2 text-center text-sm font-medium leading-6 text-grayText">
-          Votre profil n'a pas pu être chargé. Vérifiez votre connexion puis réessayez.
+          {t('profile.offlineBody')}
         </Text>
         <TouchableOpacity
           onPress={() => { setLoading(true); loadData(); }}
           className="mt-6 rounded-full bg-primary px-8 py-3"
           activeOpacity={0.85}
         >
-          <Text className="text-sm font-semibold text-white">Réessayer</Text>
+          <Text className="text-sm font-semibold text-white">{t('profile.retry')}</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -164,8 +169,13 @@ export default function ProfileScreen() {
       >
         {/* Header */}
         <Animated.View entering={FadeInDown.duration(450)} className="px-5 pt-4">
-          <Text className="text-2xl font-semibold tracking-[-0.3px] text-dark">Profil</Text>
-          <Text className="mt-1 text-sm font-medium text-grayText">Gérez vos informations personnelles</Text>
+          <View className="flex-row items-center justify-between">
+            <View>
+              <Text className="text-2xl font-semibold tracking-[-0.3px] text-dark">{t('profile.title')}</Text>
+              <Text className="mt-1 text-sm font-medium text-grayText">{t('profile.subtitle')}</Text>
+            </View>
+            <LanguageSwitcher />
+          </View>
         </Animated.View>
 
         {/* Profile card */}
@@ -195,7 +205,7 @@ export default function ProfileScreen() {
             )}
             <View className="mt-3 flex-row items-center rounded-full bg-success-50 px-3 py-1.5">
               <Ionicons name="shield-checkmark" size={14} color="#10B981" />
-              <Text className="ml-1.5 text-xs font-semibold text-success">Compte actif</Text>
+              <Text className="ml-1.5 text-xs font-semibold text-success">{t('profile.activeAccount')}</Text>
             </View>
           </View>
         </Animated.View>
@@ -209,7 +219,7 @@ export default function ProfileScreen() {
               </View>
               <Text className="text-2xl font-semibold text-dark">{stats.appointmentCount}</Text>
             </View>
-            <Text className="mt-2 text-xs font-medium text-grayText">Rendez-vous</Text>
+            <Text className="mt-2 text-xs font-medium text-grayText">{t('profile.appts')}</Text>
           </View>
           <View className="flex-1 rounded-panel border-hairline bg-white p-4 shadow-panel">
             <View className="flex-row items-center gap-2">
@@ -218,13 +228,13 @@ export default function ProfileScreen() {
               </View>
               <Text className="text-2xl font-semibold text-dark">{stats.doctorCount}</Text>
             </View>
-            <Text className="mt-2 text-xs font-medium text-grayText">Médecins contactés</Text>
+            <Text className="mt-2 text-xs font-medium text-grayText">{t('profile.doctors')}</Text>
           </View>
         </Animated.View>
 
         {/* Menu */}
         <Animated.View entering={FadeInDown.delay(180).duration(450)} className="mt-8 px-5">
-          <Text className="text-[22px] font-medium leading-[26px] tracking-[-0.44px] text-dark">Compte</Text>
+          <Text className="text-[22px] font-medium leading-[26px] tracking-[-0.44px] text-dark">{t('profile.account')}</Text>
           <View className="mt-4 overflow-hidden rounded-panel border border-hairline bg-white shadow-panel">
             {menuItems.map((item, index) => (
               <TouchableOpacity
@@ -260,7 +270,44 @@ export default function ProfileScreen() {
               <Ionicons name="log-out-outline" size={18} color="#c13515" />
             )}
             <Text className="ml-2 text-sm font-medium text-[#c13515]">
-              {signingOut ? 'Déconnexion...' : 'Se déconnecter'}
+              {signingOut ? t('profile.loggingOut') : t('profile.logout')}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
+              if (!user?.id) return;
+              Alert.alert(t('profile.deleteTitle'), t('profile.deleteBody'), [
+                { text: t('profile.logoutCancel'), style: 'cancel' },
+                {
+                  text: t('profile.deleteConfirm'),
+                  style: 'destructive',
+                  onPress: async () => {
+                    const res = await requestAccountDeletion(user.id);
+                    if (res.success) {
+                      Alert.alert(t('profile.deleteDoneTitle'), t('profile.deleteDoneBody'), [
+                        {
+                          text: 'OK',
+                          onPress: async () => {
+                            try {
+                              await signOut();
+                            } catch (e) {
+                              console.error('Sign out after deletion request failed:', e);
+                            }
+                          },
+                        },
+                      ]);
+                    } else {
+                      Alert.alert(t('rdv.error'), t('profile.deleteFail'));
+                    }
+                  },
+                },
+              ]);
+            }}
+            className="mt-3 flex-row items-center justify-center py-2"
+            activeOpacity={0.7}
+          >
+            <Text className="text-xs font-medium text-grayText underline">
+              {t('profile.deleteAccount')}
             </Text>
           </TouchableOpacity>
           <Text className="mt-4 text-center text-xs text-grayText">AB Santé v1.0.2</Text>
@@ -268,11 +315,11 @@ export default function ProfileScreen() {
       </ScrollView>
 
       {/* Edit Modal */}
-      <Modal visible={editModal} animationType="slide" transparent>
+      <Modal visible={editModal} animationType="slide" transparent onRequestClose={() => setEditModal(false)}>
         <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}>
           <View className="rounded-t-3xl bg-white px-5 pb-10 pt-6">
             <View className="flex-row items-center justify-between">
-              <Text className="text-lg font-semibold text-dark">Modifier le profil</Text>
+              <Text className="text-lg font-semibold text-dark">{t('profile.editTitle')}</Text>
               <TouchableOpacity onPress={() => setEditModal(false)}>
                 <Ionicons name="close" size={24} color="#3D4B64" />
               </TouchableOpacity>
@@ -280,28 +327,28 @@ export default function ProfileScreen() {
             <View className="mt-6 gap-4">
               <View className="flex-row gap-3">
                 <View className="flex-1">
-                  <Text className="mb-1.5 text-sm font-semibold text-dark">Prénom</Text>
+                  <Text className="mb-1.5 text-sm font-semibold text-dark">{t('profile.firstName')}</Text>
                   <TextInput
                     className="rounded-listing border border-hairline bg-white px-3 py-2.5 text-sm text-dark"
                     value={editFirst}
                     onChangeText={setEditFirst}
-                    placeholder="Prénom"
+                    placeholder={t('profile.firstName')}
                     placeholderTextColor="#929292"
                   />
                 </View>
                 <View className="flex-1">
-                  <Text className="mb-1.5 text-sm font-semibold text-dark">Nom</Text>
+                  <Text className="mb-1.5 text-sm font-semibold text-dark">{t('profile.lastName')}</Text>
                   <TextInput
                     className="rounded-listing border border-hairline bg-white px-3 py-2.5 text-sm text-dark"
                     value={editLast}
                     onChangeText={setEditLast}
-                    placeholder="Nom"
+                    placeholder={t('profile.lastName')}
                     placeholderTextColor="#929292"
                   />
                 </View>
               </View>
               <View>
-                <Text className="mb-1.5 text-sm font-semibold text-dark">Téléphone</Text>
+                <Text className="mb-1.5 text-sm font-semibold text-dark">{t('profile.phone')}</Text>
                 <TextInput
                   className="rounded-listing border border-hairline bg-white px-3 py-2.5 text-sm text-dark"
                   value={editPhone}
@@ -320,7 +367,7 @@ export default function ProfileScreen() {
               {saving ? (
                 <ActivityIndicator size="small" color="#F53E8A" />
               ) : (
-                <Text className="text-center text-base font-medium text-white">Enregistrer</Text>
+                <Text className="text-center text-base font-medium text-white">{t('profile.save')}</Text>
               )}
             </TouchableOpacity>
           </View>

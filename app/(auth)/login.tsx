@@ -7,10 +7,12 @@ import { FormInput } from '@/components/ui/FormInput';
 import { PasswordInput } from '@/components/ui/PasswordInput';
 import { PrimaryButton } from '@/components/ui/PrimaryButton';
 import { BrandLogo } from '@/components/ui/BrandLogo';
+import { useLanguage } from '@/lib/i18n/language-context';
 import { signIn, signInWithGoogle } from '@/lib/services/auth-service';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { t } = useLanguage();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,15 +24,15 @@ export default function LoginScreen() {
     const newErrors: Record<string, string> = {};
 
     if (!email.trim()) {
-      newErrors.email = "L'email est requis";
+      newErrors.email = t('auth.errEmailRequired');
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      newErrors.email = "Format d'email invalide";
+      newErrors.email = t('auth.errEmailInvalid');
     }
 
     if (!password) {
-      newErrors.password = 'Le mot de passe est requis';
+      newErrors.password = t('auth.errPasswordRequired');
     } else if (password.length < 6) {
-      newErrors.password = 'Le mot de passe doit contenir au moins 6 caractères';
+      newErrors.password = t('auth.errPasswordShort');
     }
 
     setErrors(newErrors);
@@ -44,12 +46,12 @@ export default function LoginScreen() {
     try {
       const { error } = await signIn({ email, password });
       if (error) {
-        Alert.alert('Erreur', getFrenchErrorMessage(error.message));
+        Alert.alert(t('auth.error'), getLocalizedErrorMessage(error.message));
       }
       // AuthContext will handle the redirect
     } catch (e) {
       console.error('Sign in failed:', e);
-      Alert.alert('Erreur', "Erreur de connexion. Vérifiez votre connexion internet");
+      Alert.alert(t('auth.error'), t('auth.errNetwork'));
     } finally {
       setLoading(false);
     }
@@ -60,25 +62,25 @@ export default function LoginScreen() {
     try {
       const result = await signInWithGoogle();
       if (!result.success && result.error) {
-        Alert.alert('Erreur', result.error);
+        Alert.alert(t('auth.error'), result.error);
       }
       // AuthContext will handle the redirect
     } catch (e) {
       console.error('Google sign in failed:', e);
-      Alert.alert('Erreur', "Erreur de connexion. Vérifiez votre connexion internet");
+      Alert.alert(t('auth.error'), t('auth.errNetwork'));
     } finally {
       setGoogleLoading(false);
     }
   };
 
-  const getFrenchErrorMessage = (message: string): string => {
+  const getLocalizedErrorMessage = (message: string): string => {
     if (!message || message === '{}' || message === '[object Object]') {
-      return "Une erreur inattendue s'est produite. Veuillez réessayer";
+      return t('auth.errUnexpected');
     }
     const lower = message.toLowerCase();
-    if (lower.includes('invalid login')) return 'Email ou mot de passe incorrect';
-    if (lower.includes('email not confirmed')) return "Veuillez confirmer votre adresse email";
-    if (lower.includes('network')) return "Erreur de connexion. Vérifiez votre connexion internet";
+    if (lower.includes('invalid login')) return t('auth.errInvalidLogin');
+    if (lower.includes('email not confirmed')) return t('auth.errEmailNotConfirmed');
+    if (lower.includes('network')) return t('auth.errNetwork');
     return message;
   };
 
@@ -120,17 +122,17 @@ export default function LoginScreen() {
         {/* Title */}
         <View className="mt-6 px-6">
           <Text className="text-center text-3xl font-semibold tracking-[-0.5px] text-dark">
-            Connexion
+            {t('auth.loginTitle')}
           </Text>
           <Text className="mt-2 text-center text-sm font-medium text-grayText">
-            Connectez-vous à votre compte AB Santé
+            {t('auth.loginSub')}
           </Text>
         </View>
 
         {/* Form */}
         <View className="mt-6 px-5">
           <FormInput
-            label="Email"
+            label={t('auth.email')}
             placeholder="vous@exemple.com"
             iconName="mail"
             value={email}
@@ -141,24 +143,24 @@ export default function LoginScreen() {
           />
 
           <PasswordInput
-            label="Mot de passe"
+            label={t('auth.password')}
             placeholder="••••••••"
             value={password}
             onChangeText={setPassword}
             error={errors.password}
-            helperText="Minimum 6 caractères"
+            helperText={t('auth.minChars')}
           />
 
           <Link href="/(auth)/forgot-password" asChild>
             <Pressable className="mb-4 self-end">
               <Text className="text-sm font-medium text-primary">
-                Mot de passe oublié ?
+                {t('auth.forgot')}
               </Text>
             </Pressable>
           </Link>
 
           <PrimaryButton
-            title="Se connecter"
+            title={t('auth.loginBtn')}
             onPress={handleLogin}
             loading={loading}
           />
@@ -193,13 +195,13 @@ export default function LoginScreen() {
         {/* Footer */}
         <View className="mt-6 items-center px-5">
           <Text className="text-sm font-medium text-grayText">
-            Pas de compte ?{' '}
+            {t('auth.noAccount')}{' '}
             <Text
               className="font-semibold text-primary"
               onPress={() => router.push('/(auth)/welcome')}
               style={{ includeFontPadding: false }}
             >
-              Créez-en un
+              {t('auth.createOne')}
             </Text>
           </Text>
         </View>

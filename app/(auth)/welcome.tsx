@@ -4,6 +4,8 @@ import { useRouter, Link } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { BrandLogo } from '@/components/ui/BrandLogo';
+import { useLanguage } from '@/lib/i18n/language-context';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 interface RoleCardProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -72,6 +74,7 @@ function RoleCard({
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const { t } = useLanguage();
 
   return (
     <SafeAreaView className="flex-1 overflow-hidden bg-[#FCFBFD]">
@@ -100,25 +103,28 @@ export default function WelcomeScreen() {
         {/* Headline */}
         <View className="mt-1 items-center px-[10px]">
           <Text className="text-[36px] font-semibold leading-[43px] tracking-[-1.1px] text-dark">
-            Bienvenue
+            {t('auth.welcome')}
           </Text>
 
           <Text className="mt-[7px] text-[17px] font-medium leading-6 text-primary">
-            Votre santé, au cœur de tout.
+            {t('auth.tagline')}
           </Text>
 
           <View className="mb-[15px] mt-[17px] h-[3px] w-[34px] rounded-full bg-primary" />
 
           <Text className="max-w-[340px] text-center text-[14px] font-normal leading-[21px] text-grayText">
-            La plateforme qui connecte patients et professionnels de santé
-            au Maroc.
+            {t('auth.intro')}
           </Text>
+
+          <View className="mt-4">
+            <LanguageSwitcher />
+          </View>
         </View>
 
         {/* Role Selection */}
         <View className="mt-[34px]">
           <Text className="mb-[13px] text-center text-[15px] font-semibold leading-[21px] text-dark">
-            Comment souhaitez-vous continuer ?
+            {t('auth.howContinue')}
           </Text>
 
           <RoleCard
@@ -126,8 +132,8 @@ export default function WelcomeScreen() {
             iconColor="#F53E8A"
             backgroundClass="bg-white"
             iconBackgroundClass="bg-primary-50"
-            title="Patient / Client"
-            description="Trouvez un médecin, une pharmacie ou un établissement de santé près de chez vous."
+            title={t('auth.roleClient')}
+            description={t('auth.roleClientDesc')}
             onPress={() => router.push('/(auth)/register?role=client')}
           />
 
@@ -136,8 +142,8 @@ export default function WelcomeScreen() {
             iconColor="#3578FF"
             backgroundClass="bg-white"
             iconBackgroundClass="bg-secondary-50"
-            title="Professionnel de santé"
-            description="Gérez votre activité et recevez vos rendez-vous en toute simplicité."
+            title={t('auth.rolePro')}
+            description={t('auth.roleProDesc')}
             onPress={() =>
               router.push('/(auth)/register?role=professional')
             }
@@ -155,12 +161,12 @@ export default function WelcomeScreen() {
           </View>
 
           <Text className="text-[12.5px] font-medium leading-[19px] text-grayText">
-            Vos données sont{' '}
-            <Text className="font-semibold text-secondary-tone">sécurisées</Text>
+            {t('auth.securePrefix')}{' '}
+            <Text className="font-semibold text-secondary-tone">{t('auth.secure')}</Text>
           </Text>
 
           <Text className="mt-[1px] text-[11.5px] leading-[17px] text-grayText">
-            Confidentialité garantie.
+            {t('auth.privacy')}
           </Text>
         </View>
 
@@ -171,11 +177,11 @@ export default function WelcomeScreen() {
             className="w-full items-center rounded-full border border-hairline bg-white px-6 py-4 shadow-panel"
           >
             <Text className="text-sm font-semibold text-dark">
-              Continuer en invité
+              {t('auth.guest')}
             </Text>
           </Pressable>
           <Text className="mt-2 text-center text-[11.5px] leading-[17px] text-grayText">
-            Découvrez l'app — la connexion n'est demandée qu'au moment de réserver.
+            {t('auth.guestHint')}
           </Text>
         </View>
 
@@ -184,9 +190,9 @@ export default function WelcomeScreen() {
           <Link href="/(auth)/login" asChild>
             <Pressable>
               <Text className="text-[13px] font-medium leading-5 text-grayText">
-                Déjà un compte ?{' '}
+                {t('auth.hasAccount')}{' '}
                 <Text className="font-semibold text-primary">
-                  Connectez-vous
+                  {t('auth.loginLink')}
                 </Text>
               </Text>
             </Pressable>

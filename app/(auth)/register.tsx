@@ -1,5 +1,13 @@
 import { useState } from 'react';
-import { View, Text, ScrollView, Pressable, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  ScrollView,
+  Pressable,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -7,10 +15,12 @@ import { FormInput } from '@/components/ui/FormInput';
 import { PasswordInput } from '@/components/ui/PasswordInput';
 import { PrimaryButton } from '@/components/ui/PrimaryButton';
 import { BrandLogo } from '@/components/ui/BrandLogo';
+import { useLanguage } from '@/lib/i18n/language-context';
 import { signUp } from '@/lib/services/auth-service';
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const { t } = useLanguage();
   const searchParams = useLocalSearchParams();
 
   // Determine role from the query param sent by the Welcome screen.
@@ -37,26 +47,26 @@ export default function RegisterScreen() {
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
 
-    if (!fullName.trim()) newErrors.fullName = 'Le nom est requis';
+    if (!fullName.trim()) newErrors.fullName = t('auth.errNameRequired');
 
     if (!email.trim()) {
-      newErrors.email = "L'email est requis";
+      newErrors.email = t('auth.errEmailRequired');
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      newErrors.email = "Format d'email invalide";
+      newErrors.email = t('auth.errEmailInvalid');
     }
 
     if (!password) {
-      newErrors.password = 'Le mot de passe est requis';
+      newErrors.password = t('auth.errPasswordRequired');
     } else if (password.length < 6) {
-      newErrors.password = 'Minimum 6 caractères';
+      newErrors.password = t('auth.minChars');
     }
 
     if (password !== confirmPassword) {
-      newErrors.confirmPassword = 'Les mots de passe ne correspondent pas';
+      newErrors.confirmPassword = t('auth.errConfirmMismatch');
     }
 
     if (!agreed) {
-      newErrors.terms = 'Vous devez accepter les conditions';
+      newErrors.terms = t('auth.errTerms');
     }
 
     setErrors(newErrors);
@@ -64,19 +74,19 @@ export default function RegisterScreen() {
   };
 
   // ── Helpers ──
-  const getFrenchErrorMessage = (message: string): string => {
+  const getLocalizedErrorMessage = (message: string): string => {
     if (!message || message === '{}' || message === '[object Object]') {
-      return "Une erreur inattendue s'est produite. Veuillez réessayer";
+      return t('auth.errUnexpected');
     }
     const lower = message.toLowerCase();
     if (lower.includes('email') && lower.includes('already'))
-      return 'Un compte avec cet email existe déjà';
+      return t('auth.errEmailExists');
     if (lower.includes('password') && lower.includes('weak'))
-      return 'Le mot de passe doit contenir au moins 6 caractères';
+      return t('auth.errPasswordShort');
     if (lower.includes('rate') || lower.includes('too many'))
-      return 'Trop de tentatives. Veuillez patienter avant de réessayer';
+      return t('auth.errRateLimit');
     if (lower.includes('network'))
-      return "Erreur de connexion. Vérifiez votre connexion internet";
+      return t('auth.errNetwork');
     return message;
   };
 
@@ -97,7 +107,7 @@ export default function RegisterScreen() {
       });
 
       if (error) {
-        Alert.alert('Erreur', getFrenchErrorMessage(error.message));
+        Alert.alert(t('auth.error'), getLocalizedErrorMessage(error.message));
         return;
       }
 
@@ -109,7 +119,7 @@ export default function RegisterScreen() {
       // will detect the new session and redirect to the appropriate route.
     } catch (e) {
       console.error('Sign up failed:', e);
-      Alert.alert('Erreur', "Erreur de connexion. Vérifiez votre connexion internet");
+      Alert.alert(t('auth.error'), t('auth.errNetwork'));
     } finally {
       setLoading(false);
     }
@@ -154,13 +164,11 @@ export default function RegisterScreen() {
           {/* Message */}
           <View className="mt-8 px-6">
             <Text className="text-center text-xl font-semibold tracking-[-0.3px] text-dark">
-              Email de confirmation envoyé
+              {t('auth.confirmEmailTitle')}
             </Text>
             <Text className="mt-3 text-center text-sm font-medium leading-5 text-grayText">
-              Un email a été envoyé à{' '}
-              <Text className="font-medium text-dark">{email}</Text>.
-              Cliquez sur le lien pour confirmer votre adresse et
-              finaliser votre inscription.
+              {t('auth.confirmEmailBody')}{' '}
+              <Text className="font-medium text-dark">{email}</Text>
             </Text>
           </View>
 
@@ -171,7 +179,7 @@ export default function RegisterScreen() {
               onPress={() => router.push('/(auth)/login')}
               style={{ includeFontPadding: false }}
             >
-              Retour à la connexion
+              {t('auth.backToLogin')}
             </Text>
           </View>
         </ScrollView>
@@ -193,136 +201,141 @@ export default function RegisterScreen() {
         className="absolute -bottom-[190px] -left-[145px] h-[300px] w-[300px] rounded-full bg-[#FFF0F7] opacity-75"
       />
 
-      <ScrollView
+      <KeyboardAvoidingView
         className="flex-1"
-        contentContainerStyle={{ paddingBottom: 40 }}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={16}
       >
-        {/* Header — back button */}
-        <View className="px-5 pt-4">
-          <Pressable
-            onPress={() => router.back()}
-            className="self-start rounded-full border-hairline bg-white p-3 shadow-soft"
-            style={({ pressed }) => pressed && { opacity: 0.7 }}
-          >
-            <Ionicons name="chevron-back" size={24} color="#3D4B64" />
-          </Pressable>
-        </View>
-
-        {/* Logo */}
-        <View className="items-center pt-8">
-          <BrandLogo variant="standard" width={160} height={120} />
-        </View>
-
-        {/* Role badge */}
-      
-
-        {/* Title */}
-        <View className="mt-6 px-6">
-          <Text className="text-center text-3xl font-semibold tracking-[-0.5px] text-dark">
-            Création de compte
-          </Text>
-          <Text className="mt-2 text-center text-sm font-medium text-grayText">
-            {userType === 'professional'
-              ? "Créez votre compte pro pour commencer l'onboarding"
-              : 'Créez votre compte pour trouver des professionnels de santé'}
-          </Text>
-        </View>
-
-        {/* Form */}
-        <View className="mt-6 px-5">
-          <FormInput
-            label="Nom complet"
-            placeholder="Dr. Jean Dupont"
-            iconName="person"
-            value={fullName}
-            onChangeText={setFullName}
-            autoCapitalize="words"
-            error={errors.fullName}
-          />
-
-          <FormInput
-            label="Email"
-            placeholder="vous@exemple.com"
-            iconName="mail"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            error={errors.email}
-          />
-
-          <PasswordInput
-            label="Mot de passe"
-            placeholder="••••••••"
-            value={password}
-            onChangeText={setPassword}
-            error={errors.password}
-            helperText="Minimum 6 caractères"
-          />
-
-          <PasswordInput
-            label="Confirmer le mot de passe"
-            placeholder="••••••••"
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            error={errors.confirmPassword}
-          />
-
-          {/* Terms checkbox */}
-          <View className="mb-4 flex-row items-start gap-2">
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{ paddingBottom: 40 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Header — back button */}
+          <View className="px-5 pt-4">
             <Pressable
-              onPress={() => {
-                setAgreed(!agreed);
-                if (errors.terms) setErrors((e) => ({ ...e, terms: '' }));
-              }}
-              className="mt-0.5"
+              onPress={() => router.back()}
+              className="self-start rounded-full border-hairline bg-white p-3 shadow-soft"
               style={({ pressed }) => pressed && { opacity: 0.7 }}
             >
-              <Ionicons
-                name={agreed ? 'checkbox' : 'square-outline'}
-                size={20}
-                color={agreed ? '#F53E8A' : '#94a3af'}
-              />
+              <Ionicons name="chevron-back" size={24} color="#3D4B64" />
             </Pressable>
-            <Text className="text-sm font-medium text-grayText">
-              J'accepte les{' '}
-              <Text className="font-semibold text-dark">
-                conditions d'utilisation
-              </Text>{' '}
-              et la{' '}
-              <Text className="font-semibold text-dark">
-                politique de confidentialité
-              </Text>
-              .
+          </View>
+
+          {/* Logo */}
+          <View className="items-center pt-8">
+            <BrandLogo variant="standard" width={160} height={120} />
+          </View>
+
+          {/* Role badge */}
+
+          {/* Title */}
+          <View className="mt-6 px-6">
+            <Text className="text-center text-3xl font-semibold tracking-[-0.5px] text-dark">
+              {t('auth.registerTitle')}
+            </Text>
+            <Text className="mt-2 text-center text-sm font-medium text-grayText">
+              {userType === 'professional'
+                ? t('auth.registerProSub2')
+                : t('auth.registerClientSub2')}
             </Text>
           </View>
-          {errors.terms && (
-            <Text className="mb-3 text-xs text-red-500">{errors.terms}</Text>
-          )}
 
-          <PrimaryButton
-            title="Créer mon compte"
-            onPress={handleRegister}
-            loading={loading}
-          />
-        </View>
+          {/* Form */}
+          <View className="mt-6 px-5">
+            <FormInput
+              label={t('auth.fullName')}
+              placeholder="Dr. Jean Dupont"
+              iconName="person"
+              value={fullName}
+              onChangeText={setFullName}
+              autoCapitalize="words"
+              error={errors.fullName}
+            />
 
-        {/* Footer */}
-        <View className="mt-6 items-center px-5">
-          <Text className="text-sm font-medium text-grayText">
-            Déjà un compte ?{' '}
-            <Text
-              className="font-semibold text-primary"
-              onPress={() => router.push('/(auth)/login')}
-              style={{ includeFontPadding: false }}
-            >
-              Connectez-vous
+            <FormInput
+              label={t('auth.email')}
+              placeholder="vous@exemple.com"
+              iconName="mail"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              error={errors.email}
+            />
+
+            <PasswordInput
+              label={t('auth.password')}
+              placeholder="••••••••"
+              value={password}
+              onChangeText={setPassword}
+              error={errors.password}
+              helperText={t('auth.minChars')}
+            />
+
+            <PasswordInput
+              label={t('auth.confirmPassword')}
+              placeholder="••••••••"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              error={errors.confirmPassword}
+            />
+
+            {/* Terms checkbox */}
+            <View className="mb-4 flex-row items-start gap-2">
+              <Pressable
+                onPress={() => {
+                  setAgreed(!agreed);
+                  if (errors.terms) setErrors((e) => ({ ...e, terms: '' }));
+                }}
+                className="mt-0.5"
+                style={({ pressed }) => pressed && { opacity: 0.7 }}
+              >
+                <Ionicons
+                  name={agreed ? 'checkbox' : 'square-outline'}
+                  size={20}
+                  color={agreed ? '#F53E8A' : '#94a3af'}
+                />
+              </Pressable>
+              <Text className="text-sm font-medium text-grayText">
+                {t('auth.termsAccept')}{' '}
+                <Text className="font-semibold text-dark">
+                  {t('auth.termsLink')}
+                </Text>{' '}
+                {t('auth.termsAnd')}{' '}
+                <Text className="font-semibold text-dark">
+                  {t('auth.privacyLink')}
+                </Text>
+                .
+              </Text>
+            </View>
+            {errors.terms && (
+              <Text className="mb-3 text-xs text-red-500">{errors.terms}</Text>
+            )}
+
+            <PrimaryButton
+              title={t('auth.createAccount')}
+              onPress={handleRegister}
+              loading={loading}
+            />
+          </View>
+
+          {/* Footer */}
+          <View className="mt-6 items-center px-5">
+            <Text className="text-sm font-medium text-grayText">
+              {t('auth.hasAccount')}{' '}
+              <Text
+                className="font-semibold text-primary"
+                onPress={() => router.push('/(auth)/login')}
+                style={{ includeFontPadding: false }}
+              >
+                {t('auth.loginLink')}
+              </Text>
             </Text>
-          </Text>
-        </View>
-      </ScrollView>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

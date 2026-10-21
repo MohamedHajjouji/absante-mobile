@@ -107,6 +107,12 @@ export default function ProfessionalLayout() {
           ),
         }}
       />
+      {/* Sub-screens (same modules as web dashboard) — hidden from tab bar, opened from Accueil */}
+      <Tabs.Screen name="lieux" options={{ href: null, headerShown: false }} />
+      <Tabs.Screen name="calendars" options={{ href: null, headerShown: false }} />
+      <Tabs.Screen name="reviews" options={{ href: null, headerShown: false }} />
+      <Tabs.Screen name="messages" options={{ href: null, headerShown: false }} />
+      <Tabs.Screen name="revenue" options={{ href: null, headerShown: false }} />
     </Tabs>
   );
 }

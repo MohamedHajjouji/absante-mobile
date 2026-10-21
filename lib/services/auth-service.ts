@@ -137,4 +137,26 @@ export async function signOut() {
   return { error };
 }
 
+/**
+ * Request account deletion (Play Store requirement). Auth users cannot
+ * delete themselves via the client API, so this files an auditable request
+ * row (RLS: own inserts only); an admin completes the deletion and marks it
+ * done. Never throws — callers show a generic message on failure.
+ */
+export async function requestAccountDeletion(
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('account_deletion_requests').insert({
+      profile_id: userId,
+      status: 'pending',
+    });
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (e) {
+    console.error('Deletion request failed:', e);
+    return { success: false };
+  }
+}
+
 export { getRedirectUrl, processOAuthCallback };

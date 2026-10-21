@@ -277,7 +277,9 @@ export default function SalesScreen() {
   );
 
   useEffect(() => {
-    load(true);
+    // Silent refresh on tab switch — the initial `loading` state already
+    // covers first paint, so no full-screen flash when hopping tabs.
+    load(false);
   }, [tab]);
 
   useEffect(() => {
@@ -761,7 +763,7 @@ export default function SalesScreen() {
     : 'Nouveau paiement';
 
   return (
-    <SafeAreaView className="flex-1 bg-pageBg" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-pageBg" edges={['top', 'bottom']}>
       <Stack.Screen
         options={{
           headerShown: true,

@@ -4,6 +4,7 @@ import { View } from 'react-native';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { SplashScreen } from '@/components/ui/SplashScreen';
 import { useFloatingTabBarStyle } from '@/components/ui/tabBarStyle';
+import { useLanguage } from '@/lib/i18n/language-context';
 
 const ACTIVE_TINT = '#F53E8A';
 const INACTIVE_TINT = '#6a6a6a';
@@ -13,6 +14,7 @@ export default function TabsLayout() {
   // Hook first: must run before any early return. The style adapts to the
   // Android system nav bar / iOS home indicator via safe-area insets.
   const tabBarStyle = useFloatingTabBarStyle();
+  const { t } = useLanguage();
 
   if (!isLoaded) {
     return <SplashScreen />;
@@ -62,7 +64,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Accueil',
+          title: t('common.tabs.home'),
           tabBarIcon: ({ color, size, focused }) => (
             <View className="items-center justify-center">
               <Ionicons name={focused ? 'home' : 'home-outline'} size={size} color={color} />
@@ -73,7 +75,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="search"
         options={{
-          title: 'Recherche',
+          title: t('common.tabs.search'),
           tabBarIcon: ({ color, size, focused }) => (
             <View className="items-center justify-center">
               <Ionicons name={focused ? 'search' : 'search-outline'} size={size} color={color} />
@@ -84,7 +86,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="rdv"
         options={{
-          title: 'Rendez-vous',
+          title: t('common.tabs.rdv'),
           tabBarIcon: ({ color, size, focused }) => (
             <View className="items-center justify-center">
               <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={size} color={color} />
@@ -95,7 +97,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profil',
+          title: t('common.tabs.profile'),
           tabBarIcon: ({ color, size, focused }) => (
             <View className="items-center justify-center">
               <Ionicons name={focused ? 'person' : 'person-outline'} size={size} color={color} />

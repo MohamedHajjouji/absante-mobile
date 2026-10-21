@@ -16,6 +16,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { useLanguage } from '@/lib/i18n/language-context';
 import { getUnreadNotificationCount } from '@/lib/services/notification-service';
 import {
   getUserProfile,
@@ -28,6 +29,7 @@ import {
   PatientAppointment,
   SearchResultProvider,
 } from '@/lib/services/patient-service';
+import { getSpecialties, Specialty } from '@/lib/services/specialties-service';
 
 type IonIconName = keyof typeof Ionicons.glyphMap;
 
@@ -36,14 +38,26 @@ const CATEGORY_ICONS: [string, IonIconName][] = [
   ["ophtal", "eye"],
   ["ocul", "eye"],
   ["orl", "ear"],
+  ["oto-rhino", "ear"],
   ["neuro", "pulse"],
   ["dermat", "color-palette"],
   ["pediatr", "body"],
+  ["pediatre", "body"],
   ["gynec", "woman"],
   ["dent", "happy"],
   ["stomat", "happy"],
+  ["orthodont", "happy"],
   ["pharmac", "bandage"],
   ["infirm", "medical"],
+  ["kine", "fitness"],
+  ["osteo", "body"],
+  ["psy", "chatbubbles"],
+  ["radio", "scan"],
+  ["chirurg", "medkit"],
+  ["generaliste", "medkit"],
+  ["urgent", "alarm"],
+  ["sage-femme", "heart"],
+  ["nutrition", "nutrition"],
   ["clinique", "business"],
   ["domicile", "home"],
   ["fourniture", "cube"],
@@ -57,26 +71,28 @@ function categoryIcon(name: string): IonIconName {
   return hit ? hit[1] : "medkit";
 }
 
-function formatApptDate(iso: string) {
+function formatApptDate(iso: string, tag: string, todayLabel: string, tomorrowLabel: string) {
   const d = new Date(iso);
   const now = new Date();
   const isToday = d.toDateString() === now.toDateString();
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
   const isTomorrow = d.toDateString() === tomorrow.toDateString();
-  const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-  if (isToday) return `Aujourd'hui · ${time}`;
-  if (isTomorrow) return `Demain · ${time}`;
-  return d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }) + ` · ${time}`;
+  const time = d.toLocaleTimeString(tag, { hour: '2-digit', minute: '2-digit' });
+  if (isToday) return `${todayLabel} · ${time}`;
+  if (isTomorrow) return `${tomorrowLabel} · ${time}`;
+  return d.toLocaleDateString(tag, { weekday: 'short', day: 'numeric', month: 'short' }) + ` · ${time}`;
 }
 
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { t, localeTag, lang } = useLanguage();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [nextAppt, setNextAppt] = useState<PatientAppointment | null>(null);
   const [professions, setProfessions] = useState<{ id: string; name: string }[]>([]);
+  const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [popular, setPopular] = useState<SearchResultProvider[]>([]);
   const [stats, setStats] = useState({ appointmentCount: 0, doctorCount: 0 });
   const [unreadCount, setUnreadCount] = useState(0);
@@ -85,11 +101,13 @@ export default function HomeScreen() {
   const loadData = useCallback(async () => {
     try {
       // Public content loads for everyone (guests included).
-      const [profs, providers] = await Promise.all([
+      const [profs, specs, providers] = await Promise.all([
         getProfessions(),
+        getSpecialties(12),
         searchProviders({ limit: 8 }),
       ]);
       setProfessions(profs);
+      setSpecialties(specs);
       setPopular(providers);
 
       // Personal content requires a session.
@@ -137,8 +155,7 @@ export default function HomeScreen() {
   }, [loadData]);
 
   const firstName = profile?.firstName || 'Bienvenue';
-  const fullName = profile ? `${profile.firstName} ${profile.lastName}`.trim() : firstName;
-  const avatarUri =
+  const fullName = profile ? `${profile.firstName} ${profile.lastName}`.trim() : firstName;  const avatarUri =
     profile?.avatarUrl ??
     `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&color=ffffff&background=F53E8A`;
 
@@ -150,10 +167,10 @@ export default function HomeScreen() {
   const quickActions: {
     key: string; label: string; icon: keyof typeof Ionicons.glyphMap; color: string; bg: string; onPress: () => void;
   }[] = [
-    { key: 'search', label: 'Rechercher', icon: 'search', color: '#F53E8A', bg: '#FDF2F8', onPress: () => router.push('/(tabs)/search') },
-    { key: 'rdv', label: 'Mes RDV', icon: 'calendar', color: '#0D61B6', bg: '#ECF2FA', onPress: gate('/(tabs)/rdv') },
-    { key: 'notif', label: 'Notifications', icon: 'notifications', color: '#F59E0B', bg: '#FFFBEB', onPress: gate('/notifications') },
-    { key: 'profile', label: isGuest ? 'Connexion' : 'Profil', icon: 'person', color: '#10B981', bg: '#ECFDF5', onPress: gate('/(tabs)/profile') },
+    { key: 'search', label: t('home.quickSearch'), icon: 'search', color: '#F53E8A', bg: '#FDF2F8', onPress: () => router.push('/(tabs)/search') },
+    { key: 'rdv', label: t('home.quickRdv'), icon: 'calendar', color: '#0D61B6', bg: '#ECF2FA', onPress: gate('/(tabs)/rdv') },
+    { key: 'notif', label: t('home.quickNotif'), icon: 'notifications', color: '#F59E0B', bg: '#FFFBEB', onPress: gate('/notifications') },
+    { key: 'profile', label: isGuest ? t('home.quickLogin') : t('home.quickProfile'), icon: 'person', color: '#10B981', bg: '#ECFDF5', onPress: gate('/(tabs)/profile') },
   ];
 
   return (
@@ -185,7 +202,7 @@ export default function HomeScreen() {
               className="flex-row items-center rounded-full bg-primary px-5 py-2.5"
               activeOpacity={0.85}
             >
-              <Text className="text-sm font-semibold text-white">Se connecter</Text>
+              <Text className="text-sm font-semibold text-white">{t('home.quickLogin')}</Text>
             </TouchableOpacity>
           ) : (
             <View className="flex-row items-center gap-3">
@@ -218,10 +235,10 @@ export default function HomeScreen() {
         {/* Greeting */}
         <Animated.View entering={FadeInDown.delay(60).duration(450)} className="mt-5 px-5">
           <Text className="text-[26px] font-semibold tracking-[-0.3px] text-dark">
-            {isGuest ? 'Bienvenue 👋' : `Bonjour ${firstName} 👋`}
+            {isGuest ? t('home.helloGuest') : t('home.hello', { name: firstName })}
           </Text>
           <Text className="mt-1 text-sm font-medium text-grayText">
-            Prenons soin de votre santé aujourd'hui.
+            {t('home.subtitle')}
           </Text>
         </Animated.View>
 
@@ -234,7 +251,7 @@ export default function HomeScreen() {
           >
             <Ionicons name="search" size={18} color="#6a6a6a" />
             <Text className="ml-3 flex-1 text-sm font-medium text-[#929292]">
-              Rechercher un médecin...
+              {t('home.searchPh')}
             </Text>
             <View className="h-9 w-9 items-center justify-center rounded-full bg-primary">
               <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
@@ -257,7 +274,7 @@ export default function HomeScreen() {
                 <View className="flex-row items-center">
                   <View className="flex-row items-center rounded-full bg-white/20 px-3 py-1.5">
                     <View className="mr-1.5 h-1.5 w-1.5 rounded-full bg-white" />
-                    <Text className="text-[11px] font-semibold text-white">Prochain rendez-vous</Text>
+                    <Text className="text-[11px] font-semibold text-white">{t('home.nextAppt')}</Text>
                   </View>
                 </View>
                 <View className="mt-4 flex-row items-center">
@@ -268,7 +285,7 @@ export default function HomeScreen() {
                     <View className="mt-2 flex-row items-center gap-1.5">
                       <Ionicons name="time-outline" size={14} color="#FCE7F3" />
                       <Text className="text-sm font-medium text-pink-100">
-                        {formatApptDate(nextAppt.startsAt)}
+                        {formatApptDate(nextAppt.startsAt, localeTag, t('home.today'), t('home.tomorrow'))}
                       </Text>
                     </View>
                     <View className="mt-1 flex-row items-center gap-1.5">
@@ -283,13 +300,13 @@ export default function HomeScreen() {
                     <Ionicons name="calendar" size={26} color="#FFFFFF" />
                   </View>
                 </View>
-                <TouchableOpacity
-                  onPress={() => router.push('/(tabs)/rdv')}
-                  className="mt-5 self-start rounded-full bg-white px-5 py-2.5"
-                  activeOpacity={0.85}
-                >
-                  <Text className="text-sm font-semibold text-primary">Voir le RDV</Text>
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => router.push('/(tabs)/rdv')}
+                    className="mt-5 self-start rounded-full bg-white px-5 py-2.5"
+                    activeOpacity={0.85}
+                  >
+                    <Text className="text-sm font-semibold text-primary">{t('home.viewAppt')}</Text>
+                  </TouchableOpacity>
               </View>
             </LinearGradient>
           ) : (
@@ -303,20 +320,20 @@ export default function HomeScreen() {
                 <View className="flex-1 pr-3">
                   <View className="flex-row items-center gap-1.5">
                     <View className="h-2 w-2 rounded-full bg-success" />
-                    <Text className="text-xs font-semibold text-success">Bienvenue</Text>
+                    <Text className="text-xs font-semibold text-success">{t('home.welcomeTag')}</Text>
                   </View>
                   <Text className="mt-2 text-lg font-semibold text-dark">
-                    Prenez votre premier rendez-vous
+                    {t('home.emptyTitle')}
                   </Text>
                   <Text className="mt-1 text-sm font-medium text-grayText">
-                    Trouvez un médecin et réservez en quelques clics.
+                    {t('home.emptyBody')}
                   </Text>
                   <TouchableOpacity
                     onPress={() => router.push('/(tabs)/search')}
                     className="mt-4 self-start rounded-full bg-primary px-5 py-2.5"
                     activeOpacity={0.85}
                   >
-                    <Text className="text-sm font-semibold text-white">Rechercher</Text>
+                    <Text className="text-sm font-semibold text-white">{t('common.search')}</Text>
                   </TouchableOpacity>
                 </View>
                 <View className="h-16 w-16 items-center justify-center rounded-full bg-white shadow-soft">
@@ -335,21 +352,21 @@ export default function HomeScreen() {
               <Ionicons name="calendar" size={16} color="#F53E8A" />
             </View>
             <Text className="mt-2.5 text-lg font-semibold text-dark">{stats.appointmentCount}</Text>
-            <Text className="text-[11px] font-medium text-grayText">Rendez-vous</Text>
+            <Text className="text-[11px] font-medium text-grayText">{t('home.statsAppts')}</Text>
           </View>
           <View className="flex-1 rounded-panel border border-hairline bg-white p-3.5 shadow-panel">
             <View className="h-9 w-9 items-center justify-center rounded-full bg-secondary-tone-50">
               <Ionicons name="medkit" size={16} color="#0D61B6" />
             </View>
             <Text className="mt-2.5 text-lg font-semibold text-dark">{stats.doctorCount}</Text>
-            <Text className="text-[11px] font-medium text-grayText">Médecins</Text>
+            <Text className="text-[11px] font-medium text-grayText">{t('home.statsDoctors')}</Text>
           </View>
           <View className="flex-1 rounded-panel border border-hairline bg-white p-3.5 shadow-panel">
             <View className="h-9 w-9 items-center justify-center rounded-full bg-success-50">
               <Ionicons name="shield-checkmark" size={16} color="#10B981" />
             </View>
-            <Text className="mt-2.5 text-sm font-semibold text-dark">Actif</Text>
-            <Text className="text-[11px] font-medium text-grayText">Statut</Text>
+            <Text className="mt-2.5 text-sm font-semibold text-dark">{t('home.statsActive')}</Text>
+            <Text className="text-[11px] font-medium text-grayText">{t('home.statsStatus')}</Text>
           </View>
         </Animated.View>
         )}
@@ -357,7 +374,7 @@ export default function HomeScreen() {
         {/* Quick actions */}
         <Animated.View entering={FadeInDown.delay(260).duration(450)} className="mt-7 px-5">
           <Text className="text-[22px] font-medium leading-[26px] tracking-[-0.44px] text-dark">
-            Actions rapides
+            {t('home.quickTitle')}
           </Text>
           <View className="mt-5 flex-row justify-between">
             {quickActions.map((action) => (
@@ -381,14 +398,14 @@ export default function HomeScreen() {
           </View>
         </Animated.View>
 
-        {/* Categories */}
+        {/* Categories — specialties first (same source as web), professions fallback */}
         <Animated.View entering={FadeInDown.delay(320).duration(450)} className="mt-8">
           <View className="flex-row items-center justify-between px-5">
             <Text className="text-[22px] font-medium leading-[26px] tracking-[-0.44px] text-dark">
-              Catégories
+              {t('home.catsTitle')}
             </Text>
             <TouchableOpacity onPress={() => router.push('/(tabs)/search')}>
-              <Text className="text-sm font-medium text-dark underline">Voir tout</Text>
+              <Text className="text-sm font-medium text-dark underline">{t('home.seeAll')}</Text>
             </TouchableOpacity>
           </View>
           <ScrollView
@@ -396,12 +413,19 @@ export default function HomeScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingHorizontal: 20, gap: 16, marginTop: 14 }}
           >
-            {professions.slice(0, 8).map((prof) => (
+            {(specialties.length > 0
+              ? specialties.slice(0, 8).map((s) => ({ id: s.id, name: lang === 'ar' ? s.name_ar || s.name_fr : s.name_fr, slug: s.slug }))
+              : professions.slice(0, 8).map((prof) => ({ id: prof.id, name: prof.name, slug: undefined as string | undefined }))
+            ).map((cat) => (
               <Pressable
-                key={prof.id}
+                key={cat.id}
                 className="flex-col items-center"
                 style={({ pressed }) => pressed && { opacity: 0.7, transform: [{ scale: 0.97 }] }}
-                onPress={() => router.push('/(tabs)/search')}
+                onPress={() =>
+                  (cat as any).slug
+                    ? router.push({ pathname: '/(tabs)/search', params: { specialty: (cat as any).slug } })
+                    : router.push('/(tabs)/search')
+                }
               >
                 <LinearGradient
                   colors={['#FBCFE8', '#F9A8D4']}
@@ -409,10 +433,10 @@ export default function HomeScreen() {
                   end={{ x: 1, y: 1 }}
                   style={styles.categoryCircle}
                 >
-                  <Ionicons name={categoryIcon(prof.name)} size={24} color="#F53E8A" />
+                  <Ionicons name={categoryIcon(cat.name)} size={24} color="#F53E8A" />
                 </LinearGradient>
                 <Text className="mt-2 w-[76px] text-center text-xs font-semibold leading-4 text-dark" numberOfLines={2}>
-                  {prof.name}
+                  {cat.name}
                 </Text>
               </Pressable>
             ))}
@@ -424,10 +448,10 @@ export default function HomeScreen() {
           <Animated.View entering={FadeInDown.delay(380).duration(450)} className="mt-8">
             <View className="flex-row items-center justify-between px-5">
               <Text className="text-[22px] font-medium leading-[26px] tracking-[-0.44px] text-dark">
-                Médecins populaires
+                {t('home.popular')}
               </Text>
               <TouchableOpacity onPress={() => router.push('/(tabs)/search')}>
-                <Text className="text-sm font-medium text-dark underline">Voir tout</Text>
+                <Text className="text-sm font-medium text-dark underline">{t('home.seeAll')}</Text>
               </TouchableOpacity>
             </View>
             <ScrollView
@@ -446,13 +470,13 @@ export default function HomeScreen() {
                     <Ionicons name="person" size={48} color="#F53E8A" />
                     <View className="absolute right-3 top-3 flex-row items-center gap-1 rounded-full bg-white px-2 py-1 shadow-pill">
                       <Ionicons name="star" size={11} color="#F59E0B" />
-                      <Text className="text-xs font-semibold text-dark">{doc.rating.toFixed(1)}</Text>
+                      <Text className="text-xs font-semibold text-dark">{(doc.rating ?? 0).toFixed(1)}</Text>
                     </View>
                   </View>
                   <View className="p-3">
                     <View className="flex-row items-center gap-1">
                       <Ionicons name="shield-checkmark" size={13} color="#0D61B6" />
-                      <Text className="text-xs font-medium text-secondary-tone">Vérifié</Text>
+                      <Text className="text-xs font-medium text-secondary-tone">{t('home.verified')}</Text>
                     </View>
                     <Text className="mt-1.5 text-sm font-semibold text-dark" numberOfLines={1}>
                       Dr {doc.firstName} {doc.lastName}
@@ -469,7 +493,7 @@ export default function HomeScreen() {
                       activeOpacity={0.8}
                       onPress={() => router.push(`/doctor/${doc.id}`)}
                     >
-                      <Text className="text-xs font-medium text-white">Voir profil</Text>
+                      <Text className="text-xs font-medium text-white">{t('common.viewProfile')}</Text>
                     </TouchableOpacity>
                   </View>
                 </Pressable>
@@ -481,13 +505,13 @@ export default function HomeScreen() {
         {/* How It Works */}
         <Animated.View entering={FadeInDown.delay(440).duration(450)} className="mt-8 px-5">
           <Text className="text-[22px] font-medium leading-[26px] tracking-[-0.44px] text-dark">
-            Comment ça marche
+            {t('home.howTitle')}
           </Text>
           <View className="mt-5">
             {[
-              { icon: 'search' as const, title: 'Recherchez un médecin', desc: 'Filtrez selon la spécialité, la ville ou la clinique.' },
-              { icon: 'time' as const, title: 'Choisissez votre horaire', desc: 'Consultez les disponibilités en temps réel.' },
-              { icon: 'checkmark-circle' as const, title: 'Recevez votre confirmation', desc: 'Une notification vous sera envoyée instantanément.' },
+              { icon: 'search' as const, title: t('home.how0Title'), desc: t('home.how0Desc') },
+              { icon: 'time' as const, title: t('home.how1Title'), desc: t('home.how1Desc') },
+              { icon: 'checkmark-circle' as const, title: t('home.how2Title'), desc: t('home.how2Desc') },
             ].map((step, idx, arr) => (
               <View key={step.title} className="flex-row">
                 <View className="items-center">
@@ -509,9 +533,9 @@ export default function HomeScreen() {
         <Animated.View entering={FadeInDown.delay(500).duration(450)} className="mx-5 mt-4 overflow-hidden rounded-panel bg-primary p-6">
           <View className="flex-row items-center justify-between">
             <View className="flex-1 pr-3">
-              <Text className="text-lg font-semibold text-white">Besoin d'aide ?</Text>
+              <Text className="text-lg font-semibold text-white">{t('home.helpTitle')}</Text>
               <Text className="mt-1 text-sm text-pink-100">
-                Notre équipe est disponible 7j/7 pour vous accompagner.
+                {t('home.helpBody')}
               </Text>
             </View>
             <View className="h-16 w-16 items-center justify-center rounded-full bg-white/20">

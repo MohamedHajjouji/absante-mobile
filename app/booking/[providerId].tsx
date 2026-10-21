@@ -11,39 +11,24 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { useLanguage } from '@/lib/i18n/language-context';
 import {
   getProviderDetail,
   getProviderServicesForBooking,
   getCalendarForService,
   getAvailableSlots,
   bookAppointment,
+  bookGuestAppointment,
   getUserProfile,
   ProviderServiceItem,
   TimeSlot,
 } from '@/lib/services/patient-service';
 
-const STEPS = ['Service', 'Date', 'Horaire', 'Confirmation'];
-
-const SERVICE_TYPE_LABELS: Record<string, string> = {
-  consultation: 'Consultation',
-  treatment: 'Traitement',
-  examination: 'Examen',
-  laboratory: 'Laboratoire',
-  radiology: 'Radiologie',
-  vaccination: 'Vaccination',
-  other: 'Autre',
-};
-
-const MONTHS = [
-  'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin',
-  'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc',
-];
-const DAY_NAMES = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
-
-function formatDate(iso: string) {
+function formatDate(iso: string, tag: string) {
   const d = new Date(iso);
-  return d.toLocaleDateString('fr-FR', {
+  return d.toLocaleDateString(tag, {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
@@ -51,9 +36,15 @@ function formatDate(iso: string) {
   });
 }
 
-function generateDates(): { date: string; label: string; dayNum: string; dayName: string }[] {
+// Canonical site URL for the payment bridge (/pay/[oid]). Override per
+// environment with EXPO_PUBLIC_SITE_URL; defaults to production.
+const SITE_URL = process.env.EXPO_PUBLIC_SITE_URL ?? 'https://www.absante.ma';
+
+function generateDates(tag: string): { date: string; label: string; dayNum: string; dayName: string }[] {
   const dates = [];
   const now = new Date();
+  const dayFmt = new Intl.DateTimeFormat(tag, { weekday: 'short' });
+  const monthFmt = new Intl.DateTimeFormat(tag, { month: 'short' });
   for (let i = 0; i < 21; i++) {
     const d = new Date(now);
     d.setDate(d.getDate() + i);
@@ -62,9 +53,9 @@ function generateDates(): { date: string; label: string; dayNum: string; dayName
     const dd = String(d.getDate()).padStart(2, '0');
     dates.push({
       date: `${yyyy}-${mm}-${dd}`,
-      label: `${DAY_NAMES[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`,
+      label: `${dayFmt.format(d)} ${d.getDate()} ${monthFmt.format(d)}`,
       dayNum: String(d.getDate()),
-      dayName: DAY_NAMES[d.getDay()],
+      dayName: dayFmt.format(d).replace('.', ''),
     });
   }
   return dates;
@@ -82,6 +73,20 @@ export default function BookingScreen() {
   const preServiceId = Array.isArray(rawPreService) ? rawPreService[0] : rawPreService;
   const router = useRouter();
   const { user } = useAuth();
+  const { t, localeTag, lang } = useLanguage();
+  const pluralS = (n: number) => (lang === 'ar' ? '' : n > 1 ? (lang === 'en' ? 's' : 'x') : '');
+
+  const STEPS = [t('booking.steps.0'), t('booking.steps.1'), t('booking.steps.2'), t('booking.steps.3')];
+
+  const SERVICE_TYPE_LABELS: Record<string, string> = {
+    consultation: t('booking.type.consultation'),
+    treatment: t('booking.type.treatment'),
+    examination: t('booking.type.examination'),
+    laboratory: t('booking.type.laboratory'),
+    radiology: t('booking.type.radiology'),
+    vaccination: t('booking.type.vaccination'),
+    other: t('booking.type.other'),
+  };
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -97,10 +102,18 @@ export default function BookingScreen() {
   const [notes, setNotes] = useState('');
   const [calendarId, setCalendarId] = useState<string | null>(null);
   const [userName, setUserName] = useState({ first: '', last: '', phone: '' });
+  // Guest contact (parity with web guest checkout — no login wall).
+  const [guestFirst, setGuestFirst] = useState('');
+  const [guestLast, setGuestLast] = useState('');
+  const [guestEmail, setGuestEmail] = useState('');
+  const [guestPhone, setGuestPhone] = useState('');
+  const [guestErrors, setGuestErrors] = useState<Record<string, string>>({});
+  const [isGuestBooking, setIsGuestBooking] = useState(false);
+  const [bookedId, setBookedId] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [loadError, setLoadError] = useState(false);
 
-  const dates = useMemo(() => generateDates(), []);
+  const dates = useMemo(() => generateDates(localeTag), [localeTag]);
 
   const load = useCallback(async () => {
     if (!providerId) {
@@ -116,7 +129,7 @@ export default function BookingScreen() {
         user?.id ? getUserProfile(user.id) : Promise.resolve(null),
       ]);
 
-      setProviderName(detail ? `Dr ${detail.firstName} ${detail.lastName}` : 'Médecin');
+      setProviderName(detail ? `Dr ${detail.firstName} ${detail.lastName}` : t('booking.genericDoctor'));
       setProviderSpecialty(detail?.specialty ?? '');
       setServices(svcs);
 
@@ -138,7 +151,7 @@ export default function BookingScreen() {
     } finally {
       setLoading(false);
     }
-  }, [providerId, preServiceId, user?.id]);
+  }, [providerId, preServiceId, user?.id, t]);
 
   useEffect(() => {
     load();
@@ -166,7 +179,8 @@ export default function BookingScreen() {
       calendarId,
       selectedDate,
       selectedService.durationMinutes,
-      selectedService.bufferMinutes
+      selectedService.bufferMinutes,
+      providerId
     )
       .then((s) => {
         if (!active) return;
@@ -201,34 +215,150 @@ export default function BookingScreen() {
     else router.back();
   };
 
-  const handleBook = async () => {
-    if (!user?.id || !providerId || !selectedService || !calendarId || !selectedSlot) return;
+  const validateGuest = () => {
+    const errs: Record<string, string> = {};
+    if (!guestFirst.trim()) errs.first = t('booking.errFirstRequired');
+    if (!guestLast.trim()) errs.last = t('booking.errLastRequired');
+    if (!guestEmail.trim()) errs.email = t('booking.errEmailRequired');
+    else if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(guestEmail.trim()))
+      errs.email = t('booking.errEmailInvalid');
+    if (guestPhone.trim().length < 8) errs.phone = t('booking.errPhoneInvalid');
+    setGuestErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
 
+  const handleBook = async () => {
+    if (!providerId || !selectedService || !calendarId || !selectedSlot) return;
+
+    // Logged-in path (unchanged)
+    if (user?.id) {
+      setSubmitting(true);
+      try {
+        const result = await bookAppointment({
+          userId: user.id,
+          providerId,
+          serviceId: selectedService.id,
+          calendarId,
+          startsAt: selectedSlot.starts_at,
+          endsAt: selectedSlot.ends_at,
+          notes,
+          firstName: userName.first,
+          lastName: userName.last,
+          phone: userName.phone,
+        });
+
+        if (result.success) {
+          setIsGuestBooking(false);
+          setBookedId(result.appointmentId ?? null);
+          setSuccess(true);
+        } else {
+          Alert.alert(t('booking.bookError'), result.error || t('booking.bookFail'));
+        }
+      } catch (e) {
+        console.error('Booking failed:', e);
+        Alert.alert(t('booking.bookError'), t('booking.bookFailNet'));
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    // Guest path — no login wall, same RPC contract as web.
+    if (!validateGuest()) return;
     setSubmitting(true);
     try {
-      const result = await bookAppointment({
-        userId: user.id,
+      const result = await bookGuestAppointment({
         providerId,
         serviceId: selectedService.id,
         calendarId,
         startsAt: selectedSlot.starts_at,
         endsAt: selectedSlot.ends_at,
+        firstName: guestFirst,
+        lastName: guestLast,
+        email: guestEmail,
+        phone: guestPhone,
         notes,
-        firstName: userName.first,
-        lastName: userName.last,
-        phone: userName.phone,
       });
-
       if (result.success) {
+        setIsGuestBooking(true);
+        setBookedId(result.appointmentId ?? null);
         setSuccess(true);
       } else {
-        Alert.alert('Erreur', result.error || 'Impossible de prendre le rendez-vous.');
+        Alert.alert(t('booking.bookError'), result.error || t('booking.bookFail'));
       }
     } catch (e) {
-      console.error('Booking failed:', e);
-      Alert.alert('Erreur', 'Impossible de prendre le rendez-vous. Vérifiez votre connexion.');
+      console.error('Guest booking failed:', e);
+      Alert.alert(t('booking.bookError'), t('booking.bookFailNet'));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Online payment (CMI Phase 2): after success, ask the server whether
+  // THIS appointment requires it. Renders nothing when it doesn't.
+  const [payState, setPayState] = useState<
+    | { kind: 'idle' }
+    | { kind: 'checking' }
+    | { kind: 'ready'; oid: string; amount: number }
+    | { kind: 'not-required' }
+    | { kind: 'unavailable' }
+    | { kind: 'failed' }
+  >({ kind: 'idle' });
+  const [payVerified, setPayVerified] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+
+  useEffect(() => {
+    if (!success || !bookedId) return;
+    let cancelled = false;
+    setPayState({ kind: 'checking' });
+    (async () => {
+      try {
+        const res = await fetch(`${SITE_URL}/api/billing/cmi/initiate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            appointment_id: bookedId,
+            payer_email: user?.id ? (user as { email?: string }).email ?? '' : guestEmail,
+          }),
+        });
+        const data = await res.json().catch(() => null);
+        if (cancelled) return;
+        if (data?.required && data?.oid) {
+          setPayState({ kind: 'ready', oid: data.oid, amount: Number(data.amount) });
+        } else if (data?.required && data?.unavailable) {
+          setPayState({ kind: 'unavailable' });
+        } else {
+          setPayState({ kind: 'not-required' });
+        }
+      } catch (e) {
+        console.error('Payment eligibility check failed:', e);
+        if (!cancelled) setPayState({ kind: 'failed' });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [success, bookedId]);
+
+  const openPayPage = async () => {
+    if (payState.kind !== 'ready') return;
+    await WebBrowser.openBrowserAsync(`${SITE_URL}/pay/${payState.oid}`);
+  };
+
+  const verifyPayment = async () => {
+    if (payState.kind !== 'ready' || verifying) return;
+    setVerifying(true);
+    try {
+      const res = await fetch(`${SITE_URL}/api/billing/cmi/receipt?oid=${payState.oid}`);
+      const data = await res.json().catch(() => null);
+      if (data?.ok && data?.status === 'approved') setPayVerified(true);
+      else Alert.alert(t('booking.bookError'), t('booking.payNotDone'));
+    } catch (e) {
+      console.error('Payment verify failed:', e);
+      Alert.alert(t('booking.bookError'), t('booking.bookFailNet'));
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -245,13 +375,13 @@ export default function BookingScreen() {
       <SafeAreaView className="flex-1 items-center justify-center bg-pageBg px-8">
         <Ionicons name="cloud-offline-outline" size={48} color="#F53E8A" />
         <Text className="mt-4 text-base font-semibold text-dark">
-          Connexion impossible
+          {t('booking.offlineTitle')}
         </Text>
         <Text className="mt-2 text-center text-sm text-grayText">
-          La réservation n'a pas pu être chargée. Vérifiez votre connexion.
+          {t('booking.offlineBody')}
         </Text>
         <TouchableOpacity onPress={load} className="mt-6 rounded-lg bg-primary px-6 py-3">
-          <Text className="text-sm font-medium text-white">Réessayer</Text>
+          <Text className="text-sm font-medium text-white">{t('booking.retry')}</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -264,38 +394,118 @@ export default function BookingScreen() {
           <Ionicons name="checkmark-circle" size={56} color="#10B981" />
         </View>
         <Text className="mt-6 text-center text-2xl font-semibold text-dark">
-          Rendez-vous confirmé !
+          {t('booking.successTitle')}
         </Text>
         <Text className="mt-3 text-center text-sm leading-5 text-grayText">
-          Votre rendez-vous avec {providerName} a été enregistré. Vous recevrez
-          une confirmation prochainement.
+          {isGuestBooking
+            ? t('booking.successGuestBody', { name: providerName, email: guestEmail })
+            : t('booking.successBody', { name: providerName })}
         </Text>
-        <View className="mt-8 w-full gap-3">
-          <TouchableOpacity
-            className="rounded-lg bg-primary py-4"
-            activeOpacity={0.8}
-            onPress={() => router.replace('/(tabs)/rdv')}
-          >
-            <Text className="text-center text-base font-medium text-white">
-              Voir mes rendez-vous
+        {/* Reassurance: what happens next (same promise as web) */}
+        <View className="mt-5 w-full rounded-panel border border-hairline bg-white p-4">
+          <Text className="text-center text-xs leading-4 text-grayText">
+            {t('booking.successNotice')}
+          </Text>
+        </View>
+        {/* Online payment when this booking requires it (Premium+ téléconsultation) */}
+        {payVerified ? (
+          <View className="mt-4 w-full items-center rounded-panel bg-success-50 p-4">
+            <Ionicons name="checkmark-circle" size={28} color="#10B981" />
+            <Text className="mt-2 text-center text-sm font-semibold text-dark">
+              {t('booking.payDone')}
             </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            className="rounded-lg border border-hairline bg-white py-4"
-            activeOpacity={0.8}
-            onPress={() => router.replace('/(tabs)')}
-          >
-            <Text className="text-center text-base font-medium text-dark">
-              Retour à l'accueil
+          </View>
+        ) : payState.kind === 'ready' ? (
+          <View className="mt-4 w-full rounded-panel border border-hairline bg-white p-5 shadow-panel">
+            <Text className="text-center text-sm font-semibold text-dark">
+              {t('booking.payTitle')}
             </Text>
-          </TouchableOpacity>
+            <Text className="mt-1 text-center text-2xl font-semibold text-dark">
+              {payState.amount.toFixed(2)}{' '}
+              <Text className="text-xs font-medium text-grayText">MAD</Text>
+            </Text>
+            <Text className="mt-1 text-center text-xs leading-4 text-grayText">
+              {t('booking.payBody')}
+            </Text>
+            <TouchableOpacity
+              className="mt-4 rounded-lg bg-primary py-4"
+              activeOpacity={0.8}
+              onPress={openPayPage}
+            >
+              <Text className="text-center text-base font-medium text-white">
+                {t('booking.payBtn')}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              className="mt-2 py-2"
+              activeOpacity={0.7}
+              onPress={verifyPayment}
+              disabled={verifying}
+            >
+              <Text className="text-center text-sm font-medium text-primary">
+                {verifying ? t('booking.payChecking') : t('booking.payCheck')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : payState.kind === 'unavailable' ? (
+          <View className="mt-4 w-full rounded-panel bg-amber-50 p-4">
+            <Text className="text-center text-xs leading-4 text-grayText">
+              {t('booking.paySoon')}
+            </Text>
+          </View>
+        ) : null}
+        <View className="mt-6 w-full gap-3">
+          {isGuestBooking ? (
+            <>
+              <TouchableOpacity
+                className="rounded-lg bg-primary py-4"
+                activeOpacity={0.8}
+                onPress={() => router.replace('/(auth)/register?role=client')}
+              >
+                <Text className="text-center text-base font-medium text-white">
+                  {t('booking.createAccount')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                className="rounded-lg border border-hairline bg-white py-4"
+                activeOpacity={0.8}
+                onPress={() => router.replace('/(tabs)')}
+              >
+                <Text className="text-center text-base font-medium text-dark">
+                  {t('booking.backHome')}
+                </Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <TouchableOpacity
+                className="rounded-lg bg-primary py-4"
+                activeOpacity={0.8}
+                onPress={() => router.replace('/(tabs)/rdv')}
+              >
+                <Text className="text-center text-base font-medium text-white">
+                  {t('booking.viewRdv')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                className="rounded-lg border border-hairline bg-white py-4"
+                activeOpacity={0.8}
+                onPress={() => router.replace('/(tabs)')}
+              >
+                <Text className="text-center text-base font-medium text-dark">
+                  {t('booking.backHome')}
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-pageBg" edges={['top']}>
+    // bottom edge lifts the sticky CTA above the system nav bar / home indicator
+    <SafeAreaView className="flex-1 bg-pageBg" edges={['top', 'bottom']}>
       {/* Header */}
       <View className="flex-row items-center justify-between px-5 pt-4 pb-2">
         <TouchableOpacity
@@ -306,7 +516,7 @@ export default function BookingScreen() {
           <Ionicons name="chevron-back" size={22} color="#3D4B64" />
         </TouchableOpacity>
         <View className="flex-1 items-center">
-          <Text className="text-base font-semibold text-dark">Réservation</Text>
+          <Text className="text-base font-semibold text-dark">{t('booking.title')}</Text>
           <Text className="text-xs text-grayText">{providerName}</Text>
         </View>
         <View className="h-11 w-11" />
@@ -364,11 +574,36 @@ export default function BookingScreen() {
         {step === 0 && (
           <View className="px-5 pt-5">
             <Text className="text-lg font-semibold text-dark">
-              Choisissez un service
+              {t('booking.serviceTitle')}
             </Text>
             <Text className="mt-1 text-sm text-grayText">
-              Sélectionnez le type de consultation souhaité
+              {t('booking.serviceBody')}
             </Text>
+            {!user?.id && (
+              <View className="mt-3 flex-row items-center gap-2 rounded-lg bg-success-50 px-3 py-2.5">
+                <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                <Text className="flex-1 text-xs leading-4 text-grayText">
+                  {t('booking.noAccountNeeded')}
+                </Text>
+              </View>
+            )}
+            {services.length === 0 ? (
+              <View className="mt-6 items-center rounded-panel border border-hairline bg-white p-6">
+                <Ionicons name="information-circle-outline" size={32} color="#929292" />
+                <Text className="mt-2 text-center text-sm text-grayText">
+                  {t('booking.noServices')}
+                </Text>
+                <TouchableOpacity
+                  className="mt-4 rounded-lg bg-primary px-6 py-3"
+                  activeOpacity={0.8}
+                  onPress={() => router.back()}
+                >
+                  <Text className="text-center text-sm font-medium text-white">
+                    {t('booking.backToDoctor')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
             <View className="mt-4 gap-3">
               {services.map((s) => {
                 const selected = selectedService?.id === s.id;
@@ -397,7 +632,7 @@ export default function BookingScreen() {
                           <View className="flex-row items-center gap-1">
                             <Ionicons name="time-outline" size={13} color="#929292" />
                             <Text className="text-xs text-grayText">
-                              {s.durationMinutes} min
+                              {s.durationMinutes} {t('booking.min')}
                             </Text>
                           </View>
                           <Text className="text-xs text-grayText">
@@ -427,6 +662,7 @@ export default function BookingScreen() {
                 );
               })}
             </View>
+            )}
           </View>
         )}
 
@@ -434,11 +670,20 @@ export default function BookingScreen() {
         {step === 1 && (
           <View className="px-5 pt-5">
             <Text className="text-lg font-semibold text-dark">
-              Choisissez une date
+              {t('booking.dateTitle')}
             </Text>
-            <Text className="mt-1 text-sm text-grayText">
-              {selectedService?.name} · {selectedService?.durationMinutes} min
-            </Text>
+            {/* Price transparency upfront — reduces abandonment at payment anxiety */}
+            <View className="mt-2 flex-row items-center justify-between rounded-lg bg-white px-3 py-2.5" style={{ borderWidth: 1, borderColor: '#F2F2F2' }}>
+              <Text className="flex-1 text-xs font-medium text-dark" numberOfLines={1}>
+                {selectedService?.name}
+              </Text>
+              <Text className="text-xs text-grayText">
+                {selectedService?.durationMinutes} {t('booking.min')} ·{' '}
+              </Text>
+              <Text className="text-sm font-semibold text-primary">
+                {selectedService?.price} {selectedService?.currency}
+              </Text>
+            </View>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -479,7 +724,7 @@ export default function BookingScreen() {
                         selected ? 'text-white/80' : 'text-grayText'
                       }`}
                     >
-                      {MONTHS[parseInt(d.date.split('-')[1], 10) - 1]}
+                      {d.label.split(' ').slice(-1)[0]}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -500,11 +745,15 @@ export default function BookingScreen() {
                     />
                     <Text className="mt-2 text-sm font-medium text-dark">
                       {slots.length > 0
-                        ? `${slots.length} créneau${slots.length > 1 ? 'x' : ''} disponible${slots.length > 1 ? 's' : ''}`
-                        : 'Aucun créneau disponible'}
+                        ? t('booking.slotsPreview', {
+                            n: slots.length,
+                            plural: pluralS(slots.length),
+                            plural2: pluralS(slots.length),
+                          })
+                        : t('booking.noSlots')}
                     </Text>
                     <Text className="mt-1 text-xs text-grayText">
-                      {formatDate(selectedDate + 'T12:00:00Z')}
+                      {formatDate(selectedDate + 'T12:00:00Z', localeTag)}
                     </Text>
                   </>
                 )}
@@ -517,11 +766,19 @@ export default function BookingScreen() {
         {step === 2 && (
           <View className="px-5 pt-5">
             <Text className="text-lg font-semibold text-dark">
-              Choisissez un créneau
+              {t('booking.slotTitle')}
             </Text>
             <Text className="mt-1 text-sm text-grayText">
-              {selectedDate ? formatDate(selectedDate + 'T12:00:00Z') : ''}
+              {selectedDate ? formatDate(selectedDate + 'T12:00:00Z', localeTag) : ''}
             </Text>
+            <View className="mt-2 flex-row items-center justify-between rounded-lg bg-white px-3 py-2.5" style={{ borderWidth: 1, borderColor: '#F2F2F2' }}>
+              <Text className="flex-1 text-xs font-medium text-dark" numberOfLines={1}>
+                {selectedService?.name}
+              </Text>
+              <Text className="text-sm font-semibold text-primary">
+                {selectedService?.price} {selectedService?.currency}
+              </Text>
+            </View>
 
             {slotsLoading ? (
               <View className="mt-10 items-center">
@@ -531,7 +788,7 @@ export default function BookingScreen() {
               <View className="mt-10 items-center">
                 <Ionicons name="time-outline" size={48} color="#929292" />
                 <Text className="mt-4 text-sm text-grayText">
-                  Aucun créneau disponible pour cette date
+                  {t('booking.slotEmpty')}
                 </Text>
               </View>
             ) : (
@@ -572,10 +829,10 @@ export default function BookingScreen() {
         {step === 3 && (
           <View className="px-5 pt-5">
             <Text className="text-lg font-semibold text-dark">
-              Confirmez votre rendez-vous
+              {t('booking.confirmTitle')}
             </Text>
             <Text className="mt-1 text-sm text-grayText">
-              Vérifiez les détails avant de confirmer
+              {t('booking.confirmBody')}
             </Text>
 
             {/* Summary card */}
@@ -607,7 +864,7 @@ export default function BookingScreen() {
                     {selectedService?.name}
                   </Text>
                   <Text className="text-xs text-grayText">
-                    {selectedService?.durationMinutes} min ·{' '}
+                    {selectedService?.durationMinutes} {t('booking.min')} ·{' '}
                     {SERVICE_TYPE_LABELS[selectedService?.serviceType ?? ''] ??
                       selectedService?.serviceType}
                   </Text>
@@ -627,20 +884,86 @@ export default function BookingScreen() {
                 <View>
                   <Text className="text-sm font-semibold text-dark">
                     {selectedDate
-                      ? formatDate(selectedDate + 'T12:00:00Z')
+                      ? formatDate(selectedDate + 'T12:00:00Z', localeTag)
                       : ''}
                   </Text>
                   <Text className="text-xs text-grayText">
-                    à {selectedSlot?.time}
+                    {t('booking.at', { time: selectedSlot?.time ?? '' })}
                   </Text>
                 </View>
               </View>
             </View>
 
+            {/* Guest contact — shown instead of the old login wall */}
+            {!user?.id && (
+              <View className="mt-5 rounded-panel border border-hairline bg-white p-4">
+                <Text className="text-sm font-semibold text-dark">
+                  {t('booking.contactTitle')}
+                </Text>
+                <Text className="mt-1 text-xs leading-4 text-grayText">
+                  {t('booking.contactGuestSub')}
+                </Text>
+                <View className="mt-3 flex-row gap-2">
+                  <View className="flex-1">
+                    <TextInput
+                      className="rounded-lg bg-softCloud/60 px-3 py-3 text-sm text-dark"
+                      placeholder={t('booking.firstName')}
+                      placeholderTextColor="#929292"
+                      value={guestFirst}
+                      onChangeText={setGuestFirst}
+                      autoCapitalize="words"
+                    />
+                    {!!guestErrors.first && (
+                      <Text className="mt-1 text-xs text-red-500">{guestErrors.first}</Text>
+                    )}
+                  </View>
+                  <View className="flex-1">
+                    <TextInput
+                      className="rounded-lg bg-softCloud/60 px-3 py-3 text-sm text-dark"
+                      placeholder={t('booking.lastName')}
+                      placeholderTextColor="#929292"
+                      value={guestLast}
+                      onChangeText={setGuestLast}
+                      autoCapitalize="words"
+                    />
+                    {!!guestErrors.last && (
+                      <Text className="mt-1 text-xs text-red-500">{guestErrors.last}</Text>
+                    )}
+                  </View>
+                </View>
+                <TextInput
+                  className="mt-2 rounded-lg bg-softCloud/60 px-3 py-3 text-sm text-dark"
+                  placeholder={t('booking.email')}
+                  placeholderTextColor="#929292"
+                  value={guestEmail}
+                  onChangeText={setGuestEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+                {!!guestErrors.email && (
+                  <Text className="mt-1 text-xs text-red-500">{guestErrors.email}</Text>
+                )}
+                <TextInput
+                  className="mt-2 rounded-lg bg-softCloud/60 px-3 py-3 text-sm text-dark"
+                  placeholder={t('booking.phonePh')}
+                  placeholderTextColor="#929292"
+                  value={guestPhone}
+                  onChangeText={setGuestPhone}
+                  keyboardType="phone-pad"
+                />
+                {!!guestErrors.phone && (
+                  <Text className="mt-1 text-xs text-red-500">{guestErrors.phone}</Text>
+                )}
+                <Text className="mt-2 text-[11px] leading-4 text-grayText">
+                  {t('booking.emailHint')}
+                </Text>
+              </View>
+            )}
+
             {/* Notes */}
             <View className="mt-5">
               <Text className="mb-1.5 text-sm font-medium text-dark">
-                Notes (optionnel)
+                {t('booking.notes')}
               </Text>
               <View
                 className="rounded-lg bg-white px-4"
@@ -648,7 +971,7 @@ export default function BookingScreen() {
               >
                 <TextInput
                   className="min-h-[80px] py-3 text-sm text-dark"
-                  placeholder="Motif de la consultation, symptômes..."
+                  placeholder={t('booking.notesPh')}
                   placeholderTextColor="#929292"
                   multiline
                   textAlignVertical="top"
@@ -656,6 +979,13 @@ export default function BookingScreen() {
                   onChangeText={setNotes}
                 />
               </View>
+            </View>
+
+            {/* Reassurance — same promise as web, reduces no-show anxiety */}
+            <View className="mt-4 rounded-panel bg-secondary-tone-50 p-4">
+              <Text className="text-xs leading-4 text-secondary-tone">
+                {t('booking.cancelPolicy')}
+              </Text>
             </View>
           </View>
         )}
@@ -687,33 +1017,36 @@ export default function BookingScreen() {
                 canGoNext() ? 'text-white' : 'text-grayText'
               }`}
             >
-              Continuer
-            </Text>
-          </TouchableOpacity>
-        ) : !user?.id ? (
-          <TouchableOpacity
-            className="rounded-lg bg-primary py-4"
-            activeOpacity={0.8}
-            onPress={() => router.push('/(auth)/login')}
-          >
-            <Text className="text-center text-base font-medium text-white">
-              Se connecter pour confirmer
+              {t('booking.continue')}
             </Text>
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity
-            className={`rounded-lg py-4 ${submitting ? 'bg-softCloud' : 'bg-primary'}`}
-            activeOpacity={submitting ? 1 : 0.8}
-            onPress={submitting ? undefined : handleBook}
-          >
-            {submitting ? (
-              <ActivityIndicator size="small" color="#F53E8A" />
-            ) : (
-              <Text className="text-center text-base font-medium text-white">
-                Confirmer le rendez-vous
-              </Text>
+          <>
+            <TouchableOpacity
+              className={`rounded-lg py-4 ${submitting ? 'bg-softCloud' : 'bg-primary'}`}
+              activeOpacity={submitting ? 1 : 0.8}
+              onPress={submitting ? undefined : handleBook}
+            >
+              {submitting ? (
+                <ActivityIndicator size="small" color="#F53E8A" />
+              ) : (
+                <Text className="text-center text-base font-medium text-white">
+                  {t('booking.confirmBtn')}
+                </Text>
+              )}
+            </TouchableOpacity>
+            {!user?.id && (
+              <TouchableOpacity
+                className="mt-2 py-2"
+                activeOpacity={0.7}
+                onPress={() => router.push('/(auth)/login')}
+              >
+                <Text className="text-center text-sm font-medium text-primary">
+                  {t('booking.haveAccount')}
+                </Text>
+              </TouchableOpacity>
             )}
-          </TouchableOpacity>
+          </>
         )}
       </View>
     </SafeAreaView>

@@ -9,7 +9,9 @@ import {
   Modal,
   TextInput,
   RefreshControl,
+  Platform,
 } from 'react-native';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/lib/contexts/AuthContext';
@@ -53,6 +55,29 @@ function todayDateString() {
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
   return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+function parseDateString(value: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0, 0);
+  return new Date();
+}
+
+function parseTimeString(value: string): Date {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(value);
+  const d = new Date();
+  if (m) d.setHours(Number(m[1]), Number(m[2]), 0, 0);
+  return d;
+}
+
+function formatDateLabel(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return 'Choisir une date…';
+  return parseDateString(value).toLocaleDateString('fr-FR', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
 interface ActionDef {
@@ -427,6 +452,8 @@ function CreateAppointmentModal({
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   const loadOptions = useCallback(async () => {
     if (!providerId) return;
@@ -447,9 +474,29 @@ function CreateAppointmentModal({
     if (visible) {
       setError(null);
       setDate(todayDateString());
+      setShowDatePicker(false);
+      setShowTimePicker(false);
       loadOptions();
     }
   }, [visible, loadOptions]);
+
+  const onDateChange = (event: DateTimePickerEvent, selected?: Date) => {
+    // Android dialogs auto-dismiss; iOS inline stays until Fermer.
+    if (Platform.OS === 'android') setShowDatePicker(false);
+    if (event.type === 'dismissed' || !selected) return;
+    const y = selected.getFullYear();
+    const m = String(selected.getMonth() + 1).padStart(2, '0');
+    const d = String(selected.getDate()).padStart(2, '0');
+    setDate(`${y}-${m}-${d}`);
+  };
+
+  const onTimeChange = (event: DateTimePickerEvent, selected?: Date) => {
+    if (Platform.OS === 'android') setShowTimePicker(false);
+    if (event.type === 'dismissed' || !selected) return;
+    const h = String(selected.getHours()).padStart(2, '0');
+    const min = String(selected.getMinutes()).padStart(2, '0');
+    setTime(`${h}:${min}`);
+  };
 
   const handleCreate = async () => {
     if (!providerId || !serviceId || !patientId) {
@@ -587,33 +634,164 @@ function CreateAppointmentModal({
             )}
 
 
-            {/* Date / time */}
-            <View className="mt-4 flex-row gap-3">
-              <View className="flex-1">
-                <Text className="text-sm font-semibold text-dark">Date</Text>
-                <TextInput
-                  className="mt-2 rounded-listing border border-hairline bg-white px-3 py-2.5 text-sm text-dark"
-                  placeholder="AAAA-MM-JJ"
-                  placeholderTextColor="#929292"
-                  value={date}
-                  onChangeText={setDate}
-                  autoCapitalize="none"
-                  accessibilityLabel="Date du rendez-vous"
-                />
-              </View>
-              <View className="flex-1">
-                <Text className="text-sm font-semibold text-dark">Heure</Text>
-                <TextInput
-                  className="mt-2 rounded-listing border border-hairline bg-white px-3 py-2.5 text-sm text-dark"
-                  placeholder="HH:MM"
-                  placeholderTextColor="#929292"
-                  value={time}
-                  onChangeText={setTime}
-                  autoCapitalize="none"
-                  accessibilityLabel="Heure du rendez-vous"
-                />
-              </View>
+            {/* Date / time — quick chips first (no more AAAA-MM-JJ typing),
+                manual input kept as fallback */}
+            <Text className="mt-4 text-sm font-semibold text-dark">Date</Text>
+            <View className="mt-2 flex-row gap-2">
+              {(() => {
+                const days: { label: string; value: string }[] = [];
+                const now = new Date();
+                const fmt = (d: Date) => {
+                  const y = d.getFullYear();
+                  const m = String(d.getMonth() + 1).padStart(2, '0');
+                  const dd = String(d.getDate()).padStart(2, '0');
+                  return `${y}-${m}-${dd}`;
+                };
+                const names = ["Aujourd'hui", 'Demain', '+2 j', '+3 j'];
+                for (let i = 0; i < 4; i++) {
+                  const d = new Date(now);
+                  d.setDate(d.getDate() + i);
+                  days.push({ label: names[i], value: fmt(d) });
+                }
+                return days.map((d) => {
+                  const sel = date === d.value;
+                  return (
+                    <TouchableOpacity
+                      key={d.value}
+                      onPress={() => setDate(d.value)}
+                      className={`flex-1 rounded-lg py-2.5 ${sel ? 'bg-primary' : 'bg-softCloud'}`}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: sel }}
+                    >
+                      <Text className={`text-center text-xs font-medium ${sel ? 'text-white' : 'text-dark'}`}>
+                        {d.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                });
+              })()}
             </View>
+            {Platform.OS === 'web' ? (
+              <TextInput
+                className="mt-2 rounded-listing border border-hairline bg-white px-3 py-2.5 text-sm text-dark"
+                placeholder="Autre date : AAAA-MM-JJ"
+                placeholderTextColor="#929292"
+                value={date}
+                onChangeText={setDate}
+                autoCapitalize="none"
+                accessibilityLabel="Date du rendez-vous"
+              />
+            ) : (
+              <>
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowTimePicker(false);
+                    setShowDatePicker((v) => !v);
+                  }}
+                  className="mt-2 flex-row items-center justify-between rounded-listing border border-hairline bg-white px-3 py-2.5"
+                  accessibilityRole="button"
+                  accessibilityLabel="Choisir la date du rendez-vous"
+                >
+                  <Text className="text-sm text-dark">{formatDateLabel(date)}</Text>
+                  <Ionicons name="calendar-outline" size={18} color="#0D61B6" />
+                </TouchableOpacity>
+                {showDatePicker && (
+                  <View className="mt-2 overflow-hidden rounded-listing border border-hairline bg-white">
+                    <DateTimePicker
+                      value={parseDateString(date)}
+                      mode="date"
+                      display={Platform.OS === 'ios' ? 'inline' : 'calendar'}
+                      minimumDate={new Date(new Date().setHours(0, 0, 0, 0))}
+                      onChange={onDateChange}
+                    />
+                    {Platform.OS === 'ios' && (
+                      <TouchableOpacity
+                        onPress={() => setShowDatePicker(false)}
+                        className="items-center border-t border-hairline py-2.5"
+                        accessibilityRole="button"
+                        accessibilityLabel="Valider la date"
+                      >
+                        <Text className="text-sm font-semibold text-primary">Valider</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+              </>
+            )}
+            <Text className="mt-4 text-sm font-semibold text-dark">Heure</Text>
+            <View className="mt-2 flex-row flex-wrap gap-2">
+              {['09:00', '10:00', '11:00', '14:00', '15:00', '16:00'].map((h) => {
+                const sel = time === h;
+                return (
+                  <TouchableOpacity
+                    key={h}
+                    onPress={() => setTime(h)}
+                    className={`rounded-full px-4 py-2.5 ${sel ? 'bg-primary' : 'bg-softCloud'}`}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: sel }}
+                  >
+                    <Text className={`text-xs font-medium ${sel ? 'text-white' : 'text-dark'}`}>{h}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            {Platform.OS === 'web' ? (
+              <TextInput
+                className="mt-2 rounded-listing border border-hairline bg-white px-3 py-2.5 text-sm text-dark"
+                placeholder="Autre heure : HH:MM (ex. 09:30)"
+                placeholderTextColor="#929292"
+                value={time}
+                onChangeText={setTime}
+                autoCapitalize="none"
+                keyboardType="numbers-and-punctuation"
+                accessibilityLabel="Heure du rendez-vous"
+              />
+            ) : (
+              <>
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowDatePicker(false);
+                    setShowTimePicker((v) => !v);
+                  }}
+                  className="mt-2 flex-row items-center justify-between rounded-listing border border-hairline bg-white px-3 py-2.5"
+                  accessibilityRole="button"
+                  accessibilityLabel="Choisir l'heure du rendez-vous"
+                >
+                  <Text className="text-sm text-dark">{time || 'Choisir une heure…'}</Text>
+                  <Ionicons name="time-outline" size={18} color="#0D61B6" />
+                </TouchableOpacity>
+                {showTimePicker && (
+                  <View className="mt-2 overflow-hidden rounded-listing border border-hairline bg-white">
+                    <DateTimePicker
+                      value={parseTimeString(time)}
+                      mode="time"
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      is24Hour
+                      onChange={onTimeChange}
+                    />
+                    {Platform.OS === 'ios' && (
+                      <TouchableOpacity
+                        onPress={() => setShowTimePicker(false)}
+                        className="items-center border-t border-hairline py-2.5"
+                        accessibilityRole="button"
+                        accessibilityLabel="Valider l'heure"
+                      >
+                        <Text className="text-sm font-semibold text-primary">Valider</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+              </>
+            )}
+            {(() => {
+              const svc = services.find((s) => s.id === serviceId);
+              if (!svc) return null;
+              return (
+                <Text className="mt-2 text-xs text-grayText">
+                  Durée : {svc.durationMinutes} min — fin prévue calculée automatiquement.
+                </Text>
+              );
+            })()}
 
             {/* Notes */}
             <View className="mt-4">

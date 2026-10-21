@@ -242,12 +242,44 @@ export async function getProfessions(): Promise<
 }
 
 // ── Provider Search ─────────────────────────────────────────
+// Mirrors web `/api/search` (provider_search matview + specialty_slugs + city_slug),
+// but runs directly against Supabase since mobile has no Next API layer.
+// Specialty display prefers provider_specialties → specialties.name_fr,
+// falling back to profession.name_fr (same as web specialty_names fallback).
 
 export async function searchProviders(params: {
   query?: string;
   professionId?: string;
+  specialtyId?: string;
+  specialtySlug?: string;
+  city?: string;
+  citySlug?: string;
   limit?: number;
 }): Promise<SearchResultProvider[]> {
+  // Resolve specialtySlug → specialtyId when only a slug is given.
+  let specialtyId = params.specialtyId ?? null;
+  if (!specialtyId && params.specialtySlug) {
+    const { data: spec } = await supabase
+      .from('specialties')
+      .select('id')
+      .eq('slug', params.specialtySlug)
+      .maybeSingle();
+    specialtyId = (spec as any)?.id ?? null;
+    // Unknown slug → no results (matches web `.contains(specialty_slugs)`).
+    if (!specialtyId) return [];
+  }
+
+  // Resolve specialty → provider ids via the join table.
+  let specialtyProviderIds: string[] | null = null;
+  if (specialtyId) {
+    const { data: links } = await supabase
+      .from('provider_specialties')
+      .select('provider_id')
+      .eq('specialty_id', specialtyId);
+    specialtyProviderIds = ((links ?? []) as any[]).map((l) => l.provider_id);
+    if (specialtyProviderIds.length === 0) return [];
+  }
+
   let q = supabase
     .from('providers')
     .select(
@@ -261,6 +293,7 @@ export async function searchProviders(params: {
        accepts_new_patients,
        profile:profile_id(first_name, last_name, avatar_url),
        profession:profession_id(name_fr),
+       provider_specialties(specialty:specialty_id(id, slug, name_fr)),
        provider_facilities(facility:facilities(name, address:addresses(city)))`
     )
     .eq('active', true)
@@ -271,12 +304,19 @@ export async function searchProviders(params: {
     q = q.eq('profession_id', params.professionId);
   }
 
+  if (specialtyProviderIds) {
+    q = q.in('id', specialtyProviderIds.slice(0, 100));
+  }
+
   const { data, error } = await q;
   if (error || !data) return [];
 
   let results: SearchResultProvider[] = data.map((p: any) => {
     const profile = unwrap(p.profile) as any;
     const profession = unwrap(p.profession) as any;
+    const specList = (p.provider_specialties || [])
+      .map((ps: any) => (Array.isArray(ps.specialty) ? ps.specialty[0] : ps.specialty))
+      .filter(Boolean);
     const facilityList = (p.provider_facilities || []).map((pf: any) => {
       const f = unwrap(pf.facility) as any;
       const addr = unwrap(f?.address) as any;
@@ -288,7 +328,7 @@ export async function searchProviders(params: {
       firstName: profile?.first_name ?? p.first_name ?? '',
       lastName: profile?.last_name ?? p.last_name ?? '',
       avatarUrl: profile?.avatar_url ?? null,
-      specialty: profession?.name_fr ?? 'Professionnel',
+      specialty: specList[0]?.name_fr ?? profession?.name_fr ?? 'Professionnel',
       rating: Number(p.average_rating ?? 0),
       reviewCount: Number(p.review_count ?? 0),
       yearsOfExperience: p.years_of_experience ?? null,
@@ -298,17 +338,71 @@ export async function searchProviders(params: {
     };
   });
 
-  if (params.query) {
-    const q = params.query.toLowerCase();
-    results = results.filter(
-      (r) =>
-        `${r.firstName} ${r.lastName}`.toLowerCase().includes(q) ||
-        r.specialty.toLowerCase().includes(q) ||
-        (r.city?.toLowerCase().includes(q) ?? false)
+  // City filter (web uses city_slug; mobile matches case-insensitively).
+  const cityFilter = (params.citySlug || params.city || '').trim().toLowerCase();
+  if (cityFilter) {
+    const normalized = cityFilter.replace(/\s+/g, '-');
+    results = results.filter((r) =>
+      (r.city ?? '').toLowerCase().replace(/\s+/g, '-').includes(normalized)
     );
   }
 
+  if (params.query) {
+    const needle = params.query.toLowerCase();
+    results = results.filter(
+      (r) =>
+        `${r.firstName} ${r.lastName}`.toLowerCase().includes(needle) ||
+        r.specialty.toLowerCase().includes(needle) ||
+        (r.city?.toLowerCase().includes(needle) ?? false)
+    );
+  }
+
+  // Mise en avant (Premium subscriptions): boosted providers first, stable
+  // otherwise. Best-effort — a billing outage must never break search.
+  try {
+    const boosted = await getBoostedProviderIds();
+    if (boosted.size > 0) {
+      results.sort((a, b) => {
+        const ab = boosted.has(a.id) ? 0 : 1;
+        const bb = boosted.has(b.id) ? 0 : 1;
+        return ab - bb;
+      });
+    }
+  } catch (e) {
+    console.error('Boost sort failed (unboosted results):', e);
+  }
+
   return results;
+}
+
+/**
+ * Provider ids with a live premium/premium_plus subscription (mise en
+ * avant). Via RPC so it works for signed-out searchers (subscription rows
+ * are not anonymously readable). Kept inside this service so search stays
+ * a single call for screens.
+ */
+export async function getBoostedProviderIds(): Promise<Set<string>> {
+  try {
+    const { data, error } = await supabase.rpc('get_boosted_provider_ids');
+    if (error || !data) return new Set();
+    return new Set(data as string[]);
+  } catch (e) {
+    console.error('Boosted ids fetch failed (unboosted):', e);
+    return new Set();
+  }
+}
+
+export async function getCities(limit = 50): Promise<
+  { id: string; name_fr: string; slug: string; region: string | null }[]
+> {
+  const { data } = await supabase
+    .from('cities')
+    .select('id, name_fr, slug, region')
+    .order('is_major', { ascending: false })
+    .order('name_fr')
+    .limit(limit);
+  if (!data) return [];
+  return data as any[];
 }
 
 // ── Provider map pins (search map + profile maps) ─────────────
@@ -391,6 +485,7 @@ export async function searchUnclaimedDoctors(query: string): Promise<DirectoryHi
        first_name,
        last_name,
        profession:profession_id(name_fr),
+       provider_specialties(specialty:specialty_id(name_fr)),
        provider_facilities(facility:facilities(address:addresses(city)))`
     )
     .is('profile_id', null)
@@ -400,6 +495,9 @@ export async function searchUnclaimedDoctors(query: string): Promise<DirectoryHi
   if (error || !data) return [];
   return (data as any[]).map((p) => {
     const profession = unwrap(p.profession) as any;
+    const specList = (p.provider_specialties || [])
+      .map((ps: any) => (Array.isArray(ps.specialty) ? ps.specialty[0] : ps.specialty))
+      .filter(Boolean);
     const facList = (p.provider_facilities || [])
       .map((pf: any) => unwrap(pf.facility) as any)
       .filter(Boolean);
@@ -408,7 +506,7 @@ export async function searchUnclaimedDoctors(query: string): Promise<DirectoryHi
       id: p.id,
       firstName: p.first_name ?? '',
       lastName: p.last_name ?? '',
-      specialty: profession?.name_fr ?? null,
+      specialty: specList[0]?.name_fr ?? profession?.name_fr ?? null,
       city: addr?.city ?? null,
     } as DirectoryHit;
   });
@@ -434,6 +532,7 @@ export async function getProviderDetail(
        license_number,
        profile:profile_id(first_name, last_name, avatar_url),
        profession:profession_id(name_fr),
+       provider_specialties(specialty:specialty_id(name_fr)),
        provider_facilities(facility:facilities(id, name, address:addresses(city, latitude, longitude)))`
     )
     .eq('id', providerId)
@@ -444,6 +543,9 @@ export async function getProviderDetail(
   const p = data as any;
   const profile = unwrap(p.profile) as any;
   const profession = unwrap(p.profession) as any;
+  const specList = (p.provider_specialties || [])
+    .map((ps: any) => (Array.isArray(ps.specialty) ? ps.specialty[0] : ps.specialty))
+    .filter(Boolean);
   const facilities = (p.provider_facilities || []).map((pf: any) => {
     const f = unwrap(pf.facility) as any;
     const addr = unwrap(f?.address) as any;
@@ -461,7 +563,7 @@ export async function getProviderDetail(
     firstName: profile?.first_name ?? p.first_name ?? '',
     lastName: profile?.last_name ?? p.last_name ?? '',
     avatarUrl: profile?.avatar_url ?? null,
-    specialty: profession?.name_fr ?? 'Professionnel',
+    specialty: specList[0]?.name_fr ?? profession?.name_fr ?? 'Professionnel',
     rating: Number(p.average_rating ?? 0),
     reviewCount: Number(p.review_count ?? 0),
     yearsOfExperience: p.years_of_experience ?? null,
@@ -530,7 +632,8 @@ export async function getAvailableSlots(
   calendarId: string,
   date: string,
   serviceDurationMinutes: number,
-  bufferMinutes: number = 0
+  bufferMinutes: number = 0,
+  providerId?: string | null
 ): Promise<TimeSlot[]> {
   const d = new Date(date + 'T12:00:00Z');
   const weekday = WEEKDAYS[d.getUTCDay()];
@@ -546,21 +649,38 @@ export async function getAvailableSlots(
   const dayStart = `${date}T00:00:00.000Z`;
   const dayEnd = `${date}T23:59:59.999Z`;
 
-  const [{ data: appts }, { data: exceptions }] = await Promise.all([
-    supabase
+  // Booked times via RPC (not a direct table read): RLS hides other
+  // patients' appointment rows, so a direct select silently returns [] and
+  // taken slots stay bookable until the 409 at confirm time. The RPC
+  // exposes times only — no patient data. Falls back to a direct read only
+  // when no providerId is available (caller should always pass it).
+  let appts: { starts_at: string; ends_at: string }[] | null = null;
+  const { data: exceptions } = await supabase
+    .from('calendar_exceptions')
+    .select('id')
+    .eq('calendar_id', calendarId)
+    .lte('starts_at', dayEnd)
+    .gte('ends_at', dayStart);
+
+  if (providerId) {
+    const { data: booked } = await supabase.rpc('get_booked_slots', {
+      p_provider_id: providerId,
+      p_start: date,
+      p_end: date,
+    });
+    appts = ((booked as any[] | null) || []).filter(
+      (a) => a.calendar_id === calendarId
+    );
+  } else {
+    const { data: direct } = await supabase
       .from('appointments')
       .select('starts_at, ends_at')
       .eq('calendar_id', calendarId)
       .gte('starts_at', dayStart)
       .lte('starts_at', dayEnd)
-      .not('status', 'eq', 'cancelled'),
-    supabase
-      .from('calendar_exceptions')
-      .select('id')
-      .eq('calendar_id', calendarId)
-      .lte('starts_at', dayEnd)
-      .gte('ends_at', dayStart),
-  ]);
+      .not('status', 'eq', 'cancelled');
+    appts = direct;
+  }
 
   if (exceptions && exceptions.length > 0) return [];
 
@@ -687,7 +807,9 @@ export async function cancelAppointment(
   appointmentId: string,
   patientId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase
+  // .select() so a zero-row update (RLS, already-cancelled, wrong owner)
+  // surfaces as an error instead of a silent false success.
+  const { data, error } = await supabase
     .from('appointments')
     .update({
       status: 'cancelled',
@@ -695,9 +817,13 @@ export async function cancelAppointment(
       updated_at: new Date().toISOString(),
     })
     .eq('id', appointmentId)
-    .eq('patient_id', patientId);
+    .eq('patient_id', patientId)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!data || data.length === 0) {
+    return { success: false, error: 'Rendez-vous introuvable ou déjà annulé.' };
+  }
   return { success: true };
 }
 
@@ -750,6 +876,43 @@ export async function submitReview(params: {
 }
 
 // ── Booking ─────────────────────────────────────────────────
+
+/** Guest booking (no account) — parity with web `/api/public/bookings`.
+ * Uses the hardened `create_guest_booking` RPC: validates, finds-or-creates
+ * the unclaimed patient row by email, checks overlaps atomically.
+ * When the guest later signs up with the same email,
+ * `claim_guest_patient_rows()` links these bookings. */
+export async function bookGuestAppointment(params: {
+  providerId: string;
+  serviceId: string;
+  calendarId: string;
+  startsAt: string;
+  endsAt: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  notes?: string;
+}): Promise<{ success: boolean; error?: string; appointmentId?: string }> {
+  const { data: appointmentId, error } = await supabase.rpc('create_guest_booking', {
+    p_provider_id: params.providerId,
+    p_service_id: params.serviceId,
+    p_calendar_id: params.calendarId,
+    p_facility_id: null,
+    p_starts_at: params.startsAt,
+    p_ends_at: params.endsAt,
+    p_notes: params.notes || null,
+    p_first_name: params.firstName.trim(),
+    p_last_name: params.lastName.trim(),
+    p_email: params.email.trim(),
+    p_phone: params.phone.trim(),
+  });
+
+  if (error || !appointmentId) {
+    return { success: false, error: error?.message || 'Failed to book appointment' };
+  }
+  return { success: true, appointmentId };
+}
 
 export async function bookAppointment(params: {
   userId: string;

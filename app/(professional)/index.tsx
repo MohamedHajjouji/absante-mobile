@@ -20,6 +20,7 @@ import { useAuth } from '@/lib/contexts/AuthContext';
 import { StatusChip } from '@/components/ui/StatusChip';
 import { SwitchPill } from '@/components/ui/SwitchPill';
 import { getUnreadNotificationCount } from '@/lib/services/notification-service';
+import { getConversations } from '@/lib/services/messages-service';
 import {
   getProviderProfile,
   getProviderId,
@@ -81,6 +82,7 @@ export default function ProfessionalHomeScreen() {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [toggling, setToggling] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
 
   const load = useCallback(
     async (showSpinner = false) => {
@@ -89,14 +91,16 @@ export default function ProfessionalHomeScreen() {
       try {
         const pid = await getProviderId(user.id);
         setProviderId(pid);
-        const [prof, dash, unread] = await Promise.all([
+        const [prof, dash, unread, convos] = await Promise.all([
           pid ? getProviderProfile(user.id) : Promise.resolve(null),
           pid ? getDashboard(pid) : Promise.resolve(null),
           getUnreadNotificationCount(user.id),
+          pid ? getConversations(pid) : Promise.resolve([]),
         ]);
         setProfile(prof);
         setDashboard(dash);
         setUnreadCount(unread);
+        setUnreadMessages((convos as { unreadCount: number }[]).reduce((s, c) => s + (c.unreadCount ?? 0), 0));
       } catch (e) {
         Alert.alert('Erreur', 'Impossible de charger votre tableau de bord.');
       } finally {
@@ -197,6 +201,7 @@ export default function ProfessionalHomeScreen() {
     icon: keyof typeof Ionicons.glyphMap;
     color: string;
     bg: string;
+    badge?: number;
     onPress: () => void;
   }[] = [
     {
@@ -230,6 +235,39 @@ export default function ProfessionalHomeScreen() {
       color: '#F59E0B',
       bg: '#FFFBEB',
       onPress: () => router.push('/(professional)/profile'),
+    },
+    {
+      key: 'lieux',
+      label: 'Lieux',
+      icon: 'business',
+      color: '#8B5CF6',
+      bg: '#F5F3FF',
+      onPress: () => router.push('/(professional)/lieux'),
+    },
+    {
+      key: 'calendars',
+      label: 'Calendriers',
+      icon: 'calendar-outline',
+      color: '#0EA5E9',
+      bg: '#F0F9FF',
+      onPress: () => router.push('/(professional)/calendars'),
+    },
+    {
+      key: 'reviews',
+      label: 'Avis',
+      icon: 'star',
+      color: '#F59E0B',
+      bg: '#FFFBEB',
+      onPress: () => router.push('/(professional)/reviews'),
+    },
+    {
+      key: 'messages',
+      label: 'Messages',
+      icon: 'chatbubbles',
+      color: '#10B981',
+      bg: '#ECFDF5',
+      badge: unreadMessages,
+      onPress: () => router.push('/(professional)/messages'),
     },
   ];
 
@@ -380,6 +418,24 @@ export default function ProfessionalHomeScreen() {
             )}
           </View>
         </Animated.View>
+
+        {/* ── Verified badge — only when admin has approved ── */}
+        {profile && profile.verifiedStatus === 'approved' && (
+          <Animated.View
+            entering={FadeInDown.delay(60).duration(450)}
+            className="mx-5 mt-5 flex-row items-center rounded-panel border border-[#A7F3D0] bg-[#F0FDF7] p-4"
+          >
+            <View className="h-11 w-11 items-center justify-center rounded-full bg-[#DCFCE7]">
+              <Ionicons name="shield-checkmark" size={22} color="#10B981" />
+            </View>
+            <View className="ml-3 flex-1">
+              <Text className="text-sm font-semibold text-dark">Profil vérifié</Text>
+              <Text className="mt-0.5 text-xs font-medium leading-4 text-grayText">
+                Votre profil est validé et affiché avec le badge de confiance.
+              </Text>
+            </View>
+          </Animated.View>
+        )}
 
         {/* ── Availability status ────────────────────────── */}
         <Animated.View
@@ -588,6 +644,12 @@ export default function ProfessionalHomeScreen() {
             entering={FadeInDown.delay(240).duration(450)}
             className="mx-5 mt-4 rounded-panel border border-hairline bg-white p-4 shadow-panel"
           >
+            <TouchableOpacity
+              onPress={() => router.push('/(professional)/revenue')}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Voir le détail des revenus"
+            >
             <View className="flex-row items-center justify-between">
               <View>
                 <Text className="text-base font-semibold text-dark">Performance</Text>
@@ -650,11 +712,15 @@ export default function ProfessionalHomeScreen() {
 
             <View className="mt-4 flex-row items-center justify-between border-t border-hairline pt-3">
               <Text className="text-xs font-medium text-grayText">Ce mois-ci</Text>
-              <Text className="text-sm font-semibold text-dark">
-                {formatRevenue(dashboard.monthlyRevenue[dashboard.monthlyRevenue.length - 1].amount)}{' '}
-                MAD
-              </Text>
+              <View className="flex-row items-center gap-1">
+                <Text className="text-sm font-semibold text-dark">
+                  {formatRevenue(dashboard.monthlyRevenue[dashboard.monthlyRevenue.length - 1].amount)}{' '}
+                  MAD
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color="#929292" />
+              </View>
             </View>
+            </TouchableOpacity>
           </Animated.View>
         )}
 
@@ -708,8 +774,10 @@ export default function ProfessionalHomeScreen() {
           </View>
         </Animated.View>
 
-        {/* ── Today's timeline ───────────────────────────── */}
-        {sortedToday.length > 0 && (sortedToday.length > 1 || !nextAppointment) && (
+        {/* ── Today's timeline — always shown when there is at least one
+            RDV, even a single one: the hero shows the countdown, the
+            timeline shows the context. ── */}
+        {sortedToday.length > 0 && (
           <Animated.View entering={FadeInDown.delay(320).duration(450)} className="mt-7 px-5">
             <View className="flex-row items-center justify-between">
               <Text className="text-[22px] font-medium leading-[26px] tracking-[-0.44px] text-dark">
@@ -733,12 +801,12 @@ export default function ProfessionalHomeScreen() {
             Actions rapides
           </Text>
 
-          <View className="mt-5 flex-row justify-between">
+          <View className="mt-5 flex-row flex-wrap gap-x-2 gap-y-4">
             {quickActions.map((action) => (
               <TouchableOpacity
                 key={action.key}
                 onPress={action.onPress}
-                className="items-center"
+                className="w-[23%] items-center"
                 activeOpacity={0.8}
                 accessibilityRole="button"
                 accessibilityLabel={action.label}
@@ -750,33 +818,21 @@ export default function ProfessionalHomeScreen() {
                   >
                     <Ionicons name={action.icon} size={20} color={action.color} />
                   </View>
+                  {(action.badge ?? 0) > 0 && (
+                    <View className="absolute -right-1 -top-1 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 py-0.5">
+                      <Text className="text-[10px] font-bold leading-3 text-white">
+                        {action.badge! > 9 ? '9+' : action.badge}
+                      </Text>
+                    </View>
+                  )}
                 </View>
-                <Text className="mt-2 text-xs font-medium text-dark">{action.label}</Text>
+                <Text className="mt-2 text-center text-[11px] font-medium text-dark" numberOfLines={1}>
+                  {action.label}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
         </Animated.View>
-
-        {/* ── Verification banner ────────────────────────── */}
-        {profile && profile.verifiedStatus !== 'approved' && (
-          <Animated.View
-            entering={FadeInDown.delay(440).duration(450)}
-            className="mx-5 mt-7 flex-row items-center rounded-panel border border-[#FDE68A] bg-[#FFFBEB] p-4"
-          >
-            <View className="h-11 w-11 items-center justify-center rounded-full bg-[#FEF3C7]">
-              <Ionicons name="shield-checkmark" size={22} color="#F59E0B" />
-            </View>
-            <View className="ml-3 flex-1">
-              <Text className="text-sm font-semibold text-dark">Validation en cours</Text>
-              <Text className="mt-0.5 text-xs font-medium leading-4 text-grayText">
-                Votre profil est en cours de vérification par notre équipe.
-              </Text>
-            </View>
-            <View className="rounded-full bg-[#FEF3C7] px-2.5 py-1">
-              <Text className="text-[10px] font-semibold text-[#B45309]">24–48 h</Text>
-            </View>
-          </Animated.View>
-        )}
       </ScrollView>
     </SafeAreaView>
   );

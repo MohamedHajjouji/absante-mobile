@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type ProfessionType =
   | 'medecin_cabinet'
@@ -146,7 +148,11 @@ const defaultWorkingHours: WorkingHours[] = [
   { weekday: 'friday', startTime: '09:00', endTime: '17:00' },
 ];
 
-export const useOnboardingStore = create<OnboardingState>((set) => ({
+// Persist text progress so an interrupted doctor resumes where they left
+// off. Doc files (uri) are excluded — the OS may revoke them; re-pick on return.
+export const useOnboardingStore = create<OnboardingState>()(
+  persist(
+    (set) => ({
   currentStep: 0,
   claimedProviderId: null,
   claimedProviderName: null,
@@ -193,4 +199,25 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
     workingHours: defaultWorkingHours, verificationDocs: initialVerificationDocs,
     agreedToTerms: false, isComplete: false, isSubmitting: false,
   }),
-}));
+    }),
+    {
+      name: 'ab-pro-onboarding',
+      version: 1,
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (s) => ({
+        currentStep: s.isComplete ? 0 : s.currentStep,
+        claimedProviderId: s.claimedProviderId,
+        claimedProviderName: s.claimedProviderName,
+        profession: s.profession,
+        selectedSpecialtyIds: s.selectedSpecialtyIds,
+        personalInfo: { ...s.personalInfo, avatarUrl: '' },
+        organizationInfo: s.organizationInfo,
+        address: s.address,
+        facility: s.facility,
+        services: s.services,
+        workingHours: s.workingHours,
+        agreedToTerms: s.agreedToTerms,
+      }) as OnboardingState,
+    }
+  )
+);

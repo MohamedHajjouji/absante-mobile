@@ -177,7 +177,7 @@ export default function OperationsScreen() {
   }, [load]);
 
   return (
-    <SafeAreaView className="flex-1 bg-pageBg" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-pageBg" edges={['top', 'bottom']}>
       <Stack.Screen
         options={{
           headerShown: true,

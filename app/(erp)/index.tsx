@@ -40,6 +40,8 @@ const QUICK_LINKS: {
   { title: 'Locations', subtitle: 'Matériel loué', icon: 'key', color: '#7C3AED', bg: '#F5F3FF', href: '/(erp)/rentals' },
   { title: 'Maintenance', subtitle: 'Entretiens actifs', icon: 'build', color: '#B45309', bg: '#FFFBEB', href: '/(erp)/maintenance' },
   { title: 'Services', subtitle: 'Catalogue de soins', icon: 'briefcase', color: '#059669', bg: '#DCFCE7', href: '/(erp)/services' },
+  { title: 'Annuaire', subtitle: 'Docteurs & spécialités', icon: 'medkit', color: '#F53E8A', bg: '#FDF2F8', href: '/(erp)/directory' },
+  { title: 'Revendications', subtitle: 'Valider les profils', icon: 'shield-checkmark', color: '#F59E0B', bg: '#FFFBEB', href: '/(erp)/claims' },
 ];
 
 export default function ErpHomeScreen() {
@@ -107,7 +109,7 @@ export default function ErpHomeScreen() {
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-pageBg" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-pageBg" edges={['top', 'bottom']}>
       {loading ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#F53E8A" />

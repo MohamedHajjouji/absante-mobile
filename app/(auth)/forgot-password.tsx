@@ -6,9 +6,11 @@ import { useRouter } from 'expo-router';
 import { FormInput } from '@/components/ui/FormInput';
 import { PrimaryButton } from '@/components/ui/PrimaryButton';
 import { resetPassword } from '@/lib/services/auth-service';
+import { useLanguage } from '@/lib/i18n/language-context';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
+  const { t } = useLanguage();
 
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
@@ -17,11 +19,11 @@ export default function ForgotPasswordScreen() {
 
   const validate = (): boolean => {
     if (!email.trim()) {
-      setError("L'email est requis");
+      setError(t('auth.errEmailRequired'));
       return false;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError("Format d'email invalide");
+      setError(t('auth.errEmailInvalid'));
       return false;
     }
     setError(null);
@@ -35,29 +37,29 @@ export default function ForgotPasswordScreen() {
     try {
       const result = await resetPassword(email);
       if (result.error) {
-        setError(getFrenchErrorMessage(result.error.message));
+        setError(getLocalizedErrorMessage(result.error.message));
       } else {
         setSent(true);
       }
     } catch (e) {
       console.error('Password reset failed:', e);
-      setError("Erreur de connexion. Vérifiez votre connexion internet");
+      setError(t('auth.errNetwork'));
     } finally {
       setLoading(false);
     }
   };
 
-  const getFrenchErrorMessage = (message: string): string => {
+  const getLocalizedErrorMessage = (message: string): string => {
     if (!message || message === '{}' || message === '[object Object]') {
-      return "Une erreur inattendue s'est produite. Veuillez réessayer";
+      return t('auth.errUnexpected');
     }
     const lower = message.toLowerCase();
     if (lower.includes('user not found'))
-      return "Aucun compte lié à cet email n'a été trouvé";
+      return t('auth.errUserNotFound');
     if (lower.includes('rate') || lower.includes('too many'))
-      return 'Trop de tentatives. Veuillez patienter avant de réessayer';
+      return t('auth.errRateLimit');
     if (lower.includes('network'))
-      return "Erreur de connexion. Vérifiez votre connexion internet";
+      return t('auth.errNetwork');
     return message;
   };
 
@@ -90,11 +92,10 @@ export default function ForgotPasswordScreen() {
         {/* Title */}
         <View className="mt-6 px-6">
           <Text className="text-center text-2xl font-semibold tracking-[-0.3px] text-dark">
-            Mot de passe oublié ?
+            {t('auth.forgotTitle')}
           </Text>
           <Text className="mt-2 text-center text-sm font-medium text-grayText">
-            Saisissez votre adresse email et nous vous enverrons
-            un lien pour réinitialiser votre mot de passe.
+            {t('auth.forgotSub')}
           </Text>
         </View>
 
@@ -103,7 +104,7 @@ export default function ForgotPasswordScreen() {
           {!sent ? (
             <>
               <FormInput
-                label="Email"
+                label={t('auth.email')}
                 placeholder="vous@exemple.com"
                 iconName="mail"
                 value={email}
@@ -120,7 +121,7 @@ export default function ForgotPasswordScreen() {
               )}
 
               <PrimaryButton
-                title="Envoyer le lien de réinitialisation"
+                title={t('auth.sendLink')}
                 onPress={handleReset}
                 loading={loading}
               />
@@ -131,10 +132,8 @@ export default function ForgotPasswordScreen() {
                 <Ionicons name="checkmark-circle" size={36} color="#10B981" />
               </View>
               <Text className="text-center text-sm text-grayText">
-                Un email de réinitialisation a été envoyé à{' '}
-                <Text className="font-medium text-dark">{email}</Text>.
-                Vérifiez votre boîte de réception et cliquez sur le
-                lien pour définir un nouveau mot de passe.
+                {t('auth.resetSent')}{' '}
+                <Text className="font-medium text-dark">{email}</Text>
               </Text>
             </View>
           )}
@@ -147,7 +146,7 @@ export default function ForgotPasswordScreen() {
             style={({ pressed }) => pressed && { opacity: 0.7 }}
           >
             <Text className="text-sm font-medium text-primary">
-              Retour à la connexion
+              {t('auth.backToLogin')}
             </Text>
           </Pressable>
         </View>

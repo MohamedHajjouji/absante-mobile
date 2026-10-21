@@ -19,6 +19,7 @@ import {
   markAllNotificationsRead,
   AppNotification,
 } from '@/lib/services/notification-service';
+import { useLanguage } from '@/lib/i18n/language-context';
 
 function isSameDay(a: Date, b: Date) {
   return (
@@ -34,14 +35,14 @@ function isYesterday(a: Date, b: Date) {
   return isSameDay(a, y);
 }
 
-function formatRelativeTime(iso: string) {
+function formatRelativeTime(iso: string, tag: string, yesterdayLabel: string) {
   const d = new Date(iso);
   const now = new Date();
   if (isSameDay(d, now)) {
-    return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleTimeString(tag, { hour: '2-digit', minute: '2-digit' });
   }
-  if (isYesterday(d, now)) return 'Hier';
-  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+  if (isYesterday(d, now)) return yesterdayLabel;
+  return d.toLocaleDateString(tag, { day: 'numeric', month: 'short' });
 }
 
 type Section = { title: string; items: AppNotification[] };
@@ -49,6 +50,7 @@ type Section = { title: string; items: AppNotification[] };
 export default function NotificationsScreen() {
   const router = useRouter();
   const { user, isLoaded } = useAuth();
+  const { t, localeTag } = useLanguage();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -61,7 +63,7 @@ export default function NotificationsScreen() {
       try {
         setItems(await getNotifications(user.id));
       } catch (e) {
-        Alert.alert('Erreur', 'Impossible de charger vos notifications.');
+        Alert.alert(t('misc.error'), t('misc.loadFail'));
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -97,18 +99,18 @@ export default function NotificationsScreen() {
     try {
       const res = await markAllNotificationsRead(user.id);
       if (!res.success) {
-        Alert.alert('Erreur', res.error ?? 'Impossible de marquer les notifications comme lues.');
+        Alert.alert(t('misc.error'), res.error ?? t('misc.markFail'));
         return;
       }
       setItems((prev) => prev.map((x) => ({ ...x, read: true })));
     } catch (e) {
       console.error('Failed to mark all notifications read:', e);
-      Alert.alert('Erreur', 'Impossible de marquer les notifications comme lues. Vérifiez votre connexion.');
+      Alert.alert(t('misc.error'), t('misc.markFailNet'));
     }
   };
 
-  // Group into Aujourd'hui / Hier / Plus tôt
-  const sections: Section[] = useMemoSections(items);
+  // Group into Today / Yesterday / Earlier
+  const sections: Section[] = useMemoSections(items, t);
 
   if (!isLoaded) {
     return <SplashScreen />;
@@ -141,18 +143,18 @@ export default function NotificationsScreen() {
               onPress={() => router.back()}
               className="rounded-full border-hairline bg-white p-3 shadow-soft"
               accessibilityRole="button"
-              accessibilityLabel="Retour"
+              accessibilityLabel={t('misc.back')}
             >
               <Ionicons name="chevron-back" size={24} color="#3D4B64" />
             </TouchableOpacity>
             <View className="ml-3">
               <Text className="text-2xl font-semibold tracking-[-0.3px] text-dark">
-                Notifications
+                {t('misc.notifTitle')}
               </Text>
               <Text className="mt-0.5 text-sm font-medium text-grayText">
                 {unreadCount > 0
-                  ? `${unreadCount} non lue${unreadCount > 1 ? 's' : ''}`
-                  : 'Vous êtes à jour'}
+                  ? t('misc.unread', { n: unreadCount, plural: unreadCount > 1 ? 's' : '' })
+                  : t('misc.allCaughtUp')}
               </Text>
             </View>
           </View>
@@ -162,10 +164,10 @@ export default function NotificationsScreen() {
               className="flex-row items-center rounded-full bg-primary-50 px-3 py-2"
               activeOpacity={0.8}
               accessibilityRole="button"
-              accessibilityLabel="Tout marquer comme lu"
+              accessibilityLabel={t('misc.markAllA11y')}
             >
               <Ionicons name="checkmark-done" size={15} color="#F53E8A" />
-              <Text className="ml-1 text-xs font-semibold text-primary">Tout lire</Text>
+              <Text className="ml-1 text-xs font-semibold text-primary">{t('misc.markAll')}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -176,9 +178,9 @@ export default function NotificationsScreen() {
             <View className="h-20 w-20 items-center justify-center rounded-full bg-primary-50">
               <Ionicons name="notifications-off-outline" size={34} color="#F53E8A" />
             </View>
-            <Text className="mt-6 text-lg font-semibold text-dark">Aucune notification</Text>
+            <Text className="mt-6 text-lg font-semibold text-dark">{t('misc.emptyTitle')}</Text>
             <Text className="mt-2 text-center text-sm font-medium leading-6 text-grayText">
-              Les nouvelles demandes de rendez-vous et mises à jour apparaîtront ici.
+              {t('misc.emptyBody')}
             </Text>
           </View>
         ) : (
@@ -231,7 +233,7 @@ export default function NotificationsScreen() {
                               </Text>
                             ) : null}
                             <Text className="mt-1 text-[10px] font-medium uppercase tracking-wide text-grayText">
-                              {formatRelativeTime(n.createdAt)}
+                              {formatRelativeTime(n.createdAt, localeTag, t('misc.yesterday'))}
                             </Text>
                           </View>
                         </TouchableOpacity>
@@ -248,14 +250,14 @@ export default function NotificationsScreen() {
   );
 }
 
-/** Groups notifications into Aujourd'hui / Hier / Plus tôt, preserving order. */
-function useMemoSections(items: AppNotification[]): Section[] {
+/** Groups notifications into Today / Yesterday / Earlier, preserving order. */
+function useMemoSections(items: AppNotification[], t: (key: string) => string): Section[] {
   return React.useMemo(() => {
     const now = new Date();
     const groups: Section[] = [
-      { title: "Aujourd'hui", items: [] },
-      { title: 'Hier', items: [] },
-      { title: 'Plus tôt', items: [] },
+      { title: t('misc.today'), items: [] },
+      { title: t('misc.yesterday'), items: [] },
+      { title: t('misc.earlier'), items: [] },
     ];
     for (const n of items) {
       const d = new Date(n.createdAt);

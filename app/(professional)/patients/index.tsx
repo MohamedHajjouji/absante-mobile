@@ -9,12 +9,21 @@ import {
   Alert,
   RefreshControl,
   Image,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/lib/contexts/AuthContext';
-import { getProviderId, getProviderPatients, PatientSum } from '@/lib/services/provider-service';
+import {
+  getProviderId,
+  getProviderAllPatients,
+  createProviderPatient,
+  PatientSum,
+} from '@/lib/services/provider-service';
+import { FormInput } from '@/components/ui/FormInput';
 
 function patientAvatar(p: PatientSum): string {
   if (p.avatarUrl) return p.avatarUrl;
@@ -29,13 +38,21 @@ export default function PatientsListScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [patients, setPatients] = useState<PatientSum[]>([]);
   const [query, setQuery] = useState('');
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [newFirst, setNewFirst] = useState('');
+  const [newLast, setNewLast] = useState('');
+  const [newPhone, setNewPhone] = useState('');
+  const [newEmail, setNewEmail] = useState('');
 
   const load = useCallback(async (showSpinner = false) => {
     if (!user?.id) return;
     if (showSpinner) setLoading(true);
     try {
       const pid = await getProviderId(user.id);
-      if (pid) setPatients(await getProviderPatients(pid));
+      // Same union as the home counter (linked + appointment patients).
+      if (pid) setPatients(await getProviderAllPatients(pid));
     } catch (e) {
       Alert.alert('Erreur', 'Impossible de charger vos patients.');
     } finally {
@@ -52,6 +69,49 @@ export default function PatientsListScreen() {
     setRefreshing(true);
     load();
   }, [load]);
+
+  const openSheet = () => {
+    setNewFirst('');
+    setNewLast('');
+    setNewPhone('');
+    setNewEmail('');
+    setFormError(null);
+    setSheetOpen(true);
+  };
+
+  const handleCreate = async () => {
+    if (!user?.id || saving) return;
+    setFormError(null);
+    if (!newFirst.trim() || !newLast.trim()) {
+      setFormError('Nom et prénom obligatoires.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const pid = await getProviderId(user.id);
+      if (!pid) {
+        setFormError('Profil professionnel introuvable.');
+        return;
+      }
+      const res = await createProviderPatient(pid, {
+        firstName: newFirst,
+        lastName: newLast,
+        phone: newPhone,
+        email: newEmail,
+      });
+      if (!res.success || !res.patient) {
+        setFormError(res.error ?? 'Création impossible.');
+        return;
+      }
+      setPatients((prev) => [res.patient!, ...prev]);
+      setSheetOpen(false);
+      Alert.alert('Patient ajouté', `${res.patient.firstName} ${res.patient.lastName} a été ajouté.`);
+    } catch (e) {
+      setFormError("Une erreur s'est produite. Veuillez réessayer.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const normalized = query.trim().toLowerCase();
   const filtered = patients.filter((p) =>
@@ -83,6 +143,15 @@ export default function PatientsListScreen() {
             </Text>
           </View>
         )}
+        <TouchableOpacity
+          onPress={openSheet}
+          className="ml-2 h-10 w-10 items-center justify-center rounded-full bg-primary shadow-soft"
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Ajouter un patient"
+        >
+          <Ionicons name="add" size={22} color="#ffffff" />
+        </TouchableOpacity>
       </View>
 
       {/* Search */}
@@ -124,7 +193,7 @@ export default function PatientsListScreen() {
             <Text className="mt-2 text-center text-sm font-medium leading-6 text-grayText">
               {query
                 ? 'Aucun patient ne correspond à votre recherche.'
-                : 'Les patients ayant pris rendez-vous apparaîtront ici.'}
+                : 'Les patients ayant pris rendez-vous apparaîtront ici. Utilisez le bouton + pour créer un dossier.'}
             </Text>
           </View>
         ) : (
@@ -164,6 +233,95 @@ export default function PatientsListScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Add-patient sheet */}
+      <Modal visible={sheetOpen} transparent animationType="slide" onRequestClose={() => setSheetOpen(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1">
+          <TouchableOpacity
+            className="flex-1 bg-black/40"
+            activeOpacity={1}
+            onPress={() => setSheetOpen(false)}
+          />
+          <View className="rounded-t-3xl bg-white">
+            <SafeAreaView edges={['bottom']}>
+              <View className="flex-row items-center justify-between border-b border-hairline px-5 pb-3 pt-4">
+                <View className="flex-1 pr-3">
+                  <Text className="text-base font-semibold text-dark">Nouveau patient</Text>
+                  <Text className="mt-0.5 text-xs text-grayText">
+                    Le dossier sera lié automatiquement à son compte s'il s'inscrit avec cet e-mail.
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setSheetOpen(false)}
+                  className="h-9 w-9 items-center justify-center rounded-full bg-softCloud"
+                  accessibilityRole="button"
+                  accessibilityLabel="Fermer"
+                >
+                  <Ionicons name="close" size={18} color="#3D4B64" />
+                </TouchableOpacity>
+              </View>
+              <ScrollView
+                className="max-h-[75%]"
+                contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 28 }}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                <FormInput
+                  label="Prénom *"
+                  placeholder="Prénom"
+                  iconName="person"
+                  value={newFirst}
+                  onChangeText={setNewFirst}
+                  autoCapitalize="words"
+                />
+                <FormInput
+                  label="Nom *"
+                  placeholder="Nom"
+                  iconName="person"
+                  value={newLast}
+                  onChangeText={setNewLast}
+                  autoCapitalize="words"
+                />
+                <FormInput
+                  label="Téléphone"
+                  placeholder="+212 6 12 34 56 78"
+                  iconName="call"
+                  value={newPhone}
+                  onChangeText={setNewPhone}
+                  keyboardType="phone-pad"
+                />
+                <FormInput
+                  label="E-mail"
+                  placeholder="patient@email.com"
+                  iconName="mail"
+                  value={newEmail}
+                  onChangeText={setNewEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+                {formError && (
+                  <View className="mb-3 rounded-xl border border-red-100 bg-red-50 px-4 py-3">
+                    <Text className="text-xs text-[#c13515]">{formError}</Text>
+                  </View>
+                )}
+                <TouchableOpacity
+                  onPress={handleCreate}
+                  disabled={saving}
+                  className="w-full items-center justify-center rounded-lg bg-primary py-4"
+                  accessibilityRole="button"
+                  accessibilityLabel="Créer le dossier patient"
+                >
+                  {saving ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <Text className="text-base font-medium text-white">Créer le dossier</Text>
+                  )}
+                </TouchableOpacity>
+              </ScrollView>
+            </SafeAreaView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }

@@ -2,22 +2,20 @@
   "expo": {
     "name": "AB Santé",
     "slug": "ab-sante-mobile",
-    "version": "1.0.2",
+    "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "absante",
     "userInterfaceStyle": "light",
     "icon": "./assets/icon.png",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#FFFFFF"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.absante.absante",
-      "buildNumber": "3",
+      "buildNumber": "4",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "AB Santé utilise votre galerie pour ajouter votre photo de profil et joindre des documents (ordonnances, factures).",
+        "NSCameraUsageDescription": "AB Santé utilise votre appareil photo pour photographier des documents (ordonnances, reçus) à joindre à votre dossier.",
+        "CFBundleLocalizations": ["fr", "en"]
       }
     },
     "android": {
@@ -37,7 +35,6 @@
       "expo-router",
       "expo-secure-store",
       "expo-web-browser",
-      "react-native-maps",
       [
         "expo-splash-screen",
         {
@@ -46,10 +43,11 @@
           "resizeMode": "contain",
           "backgroundColor": "#FFFFFF"
         }
-      ]
+      ],
+      "@rnmapbox/maps"
     ],
     "experiments": {},
-    "runtimeVersion": "1.0.1",
+    "runtimeVersion": "1.0.0",
     "extra": {
       "router": {},
       "eas": {

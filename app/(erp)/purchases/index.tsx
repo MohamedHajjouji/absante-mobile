@@ -45,8 +45,20 @@ const PO_STATUS_OPTIONS = [
   { value: 'cancelled', label: 'Annulé' },
 ];
 
-const STATUS_COLORS: Record<string, string> = {
-  draft: '#6B7280',
+const STATUS_LABELS: Record<string, string> = Object.fromEntries(
+  PO_STATUS_OPTIONS.map((o) => [o.value, o.label])
+);
+
+/** Valid next statuses per state — drives the status action sheet. */
+const NEXT_STATUSES: Record<string, string[]> = {
+  draft: ['ordered', 'cancelled'],
+  ordered: ['partially_received', 'received', 'cancelled'],
+  partially_received: ['received', 'cancelled'],
+  received: [],
+  cancelled: [],
+};
+
+const STATUS_COLORS: Record<string, string> = {  draft: '#6B7280',
   ordered: '#0D61B6',
   partially_received: '#B45309',
   received: '#059669',
@@ -361,18 +373,40 @@ export default function PurchasesScreen() {
 
   const poMenu = (po: Purchase) => {
     const buttons: { text: string; onPress?: () => void; style?: 'destructive' | 'cancel' }[] = [];
-    if (po.status === 'draft') {
-      buttons.push({ text: 'Valider (commandé)', onPress: () => runAct(async () => {
-        const r = await erpUpdate('purchases', po.id, { status: 'ordered' });
-        return { ok: r.ok, message: r.message };
-      }) });
-    }
     if (po.status !== 'cancelled') {
-      buttons.push({ text: 'Annuler', onPress: () => runAct(() => cancelDoc('purchases', po.id)) });
+      buttons.push({ text: 'Annuler la commande', onPress: () => runAct(() => cancelDoc('purchases', po.id)) });
     }
     buttons.push({ text: 'Supprimer définitivement', style: 'destructive', onPress: () => runAct(() => deleteDoc('purchases', po.id)) });
     buttons.push({ text: 'Fermer', style: 'cancel' });
     Alert.alert(po.purchase_number, 'Actions', buttons);
+  };
+
+  /** Optimistic status change with instant UI update (reverts + alerts on failure). */
+  const setOrderStatus = async (po: Purchase, status: string) => {
+    const prev = po.status;
+    setOrders((list) => list.map((x) => (x.id === po.id ? { ...x, status } : x)));
+    const r = await erpUpdate('purchases', po.id, { status });
+    if (!r.ok) {
+      setOrders((list) => list.map((x) => (x.id === po.id ? { ...x, status: prev } : x)));
+      Alert.alert('Erreur', r.message ?? 'Statut non modifié.');
+    }
+  };
+
+  /** Explicit status picker — no guessing which icon does what. */
+  const statusSheet = (po: Purchase) => {
+    const current = STATUS_LABELS[po.status] ?? po.status;
+    const next = NEXT_STATUSES[po.status] ?? [];
+    if (next.length === 0) {
+      Alert.alert(po.purchase_number, `Statut : ${current} — aucune transition possible.`);
+      return;
+    }
+    Alert.alert(`Statut : ${current}`, 'Passer la commande à…', [
+      ...next.map((s) => ({
+        text: STATUS_LABELS[s] ?? s,
+        onPress: () => setOrderStatus(po, s),
+      })),
+      { text: 'Fermer', style: 'cancel' as const },
+    ]);
   };
 
   const supplierList = suppliers.map((s) => ({
@@ -382,7 +416,7 @@ export default function PurchasesScreen() {
   }));
 
   return (
-    <SafeAreaView className="flex-1 bg-pageBg" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-pageBg" edges={['top', 'bottom']}>
       <Stack.Screen
         options={{
           headerShown: true,
@@ -460,27 +494,23 @@ export default function PurchasesScreen() {
                       <TouchableOpacity key={o.id} onPress={() => openPoEdit(o)} className="rounded-xl border border-hairline bg-white p-3.5" activeOpacity={0.8}>
                         <View className="flex-row items-center justify-between">
                           <Text className="flex-1 pr-2 text-sm font-semibold text-dark" numberOfLines={1}>{o.purchase_number}</Text>
-                          <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: `${color}14` }}>
-                            <Text className="text-[10px] font-semibold" style={{ color }}>{o.status}</Text>
-                          </View>
+                          <TouchableOpacity
+                            onPress={() => statusSheet(o)}
+                            className="flex-row items-center rounded-full px-2.5 py-1"
+                            style={{ backgroundColor: `${color}14` }}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Statut : ${STATUS_LABELS[o.status] ?? o.status} — toucher pour changer`}
+                          >
+                            <Text className="text-[10px] font-semibold" style={{ color }}>{STATUS_LABELS[o.status] ?? o.status}</Text>
+                            <Ionicons name="chevron-down" size={10} color={color} />
+                          </TouchableOpacity>
                         </View>
                         <Text className="mt-1 text-xs text-grayText" numberOfLines={1}>{supplierName(o.supplier_id)} · {o.purchase_date ?? ''}</Text>
                         <View className="mt-2 flex-row items-center justify-between">
                           <Text className="text-sm font-bold text-dark">{money(o.total)} MAD</Text>
-                          <View className="flex-row items-center gap-1">
-                            {o.status === 'draft' && (
-                              <TouchableOpacity onPress={() => runAct(async () => {
-                                const r = await erpUpdate('purchases', o.id, { status: 'ordered' });
-                                return { ok: r.ok, message: r.message };
-                              })} className="flex-row items-center rounded-lg bg-teal-50 px-2.5 py-1.5" accessibilityLabel="Valider la commande">
-                                <Ionicons name="checkmark" size={14} color="#0D9488" />
-                                <Text className="ml-1 text-[11px] font-semibold text-teal-700">Valider</Text>
-                              </TouchableOpacity>
-                            )}
-                            <TouchableOpacity onPress={() => poMenu(o)} className="h-8 w-8 items-center justify-center rounded-lg bg-softCloud" accessibilityLabel="Actions commande">
-                              <Ionicons name="ellipsis-horizontal" size={16} color="#3D4B64" />
-                            </TouchableOpacity>
-                          </View>
+                          <TouchableOpacity onPress={() => poMenu(o)} className="h-8 w-8 items-center justify-center rounded-lg bg-softCloud" accessibilityLabel="Actions commande">
+                            <Ionicons name="ellipsis-horizontal" size={16} color="#3D4B64" />
+                          </TouchableOpacity>
                         </View>
                       </TouchableOpacity>
                     );

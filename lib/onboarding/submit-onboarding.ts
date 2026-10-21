@@ -8,6 +8,7 @@ const PROFESSION_SLUG_MAP: Record<string, string> = {
 export interface OnboardingData {
   profession: string;
   claimedProviderId?: string | null;
+  selectedSpecialtyIds?: string[];
   personalInfo: { firstName: string; lastName: string; phone: string; whatsapp: string; gender: string; languages: string[]; biography: string; yearsOfExperience: number; licenseNumber: string; avatarUrl: string; };
   organizationInfo: { name: string; logoUrl: string; description: string; phone: string; whatsapp: string; website: string; };
   address: { region: string | null; city: string; city_id?: string | null; streetAddress: string; postalCode: string | null; latitude?: number | null; longitude?: number | null; };
@@ -297,8 +298,7 @@ export async function submitOnboarding(data: OnboardingData) {
   // 8. Insert provider services (claimed profiles keep seeded services
   // when they already exist)
   // booking_mode_enum or the insert fails)
-  if (data.services.length > 0 && !claimedHasServices) {
-    const servicesPayload = data.services.map((svc) => ({
+  if (data.services.length > 0 && !claimedHasServices) {    const servicesPayload = data.services.map((svc) => ({
       provider_id: providerId, name: svc.name, description: svc.description || null,
       service_type: svc.serviceType, booking_mode: svc.bookingMode,
       duration_minutes: svc.durationMinutes, buffer_after_minutes: 0,
@@ -306,6 +306,17 @@ export async function submitOnboarding(data: OnboardingData) {
     }));
     const { error: svcError } = await supabase.from('provider_services').insert(servicesPayload);
     if (svcError) return { success: false, error: `Services: ${svcError.message}` };
+  }
+
+  // 8b. Save specialties to provider_specialties (same table as web admin).
+  if (data.selectedSpecialtyIds && data.selectedSpecialtyIds.length > 0) {
+    await supabase.from('provider_specialties').delete().eq('provider_id', providerId);
+    await supabase.from('provider_specialties').insert(
+      data.selectedSpecialtyIds.map((specialty_id) => ({
+        provider_id: providerId,
+        specialty_id,
+      }))
+    );
   }
 
   // 9. Create default calendar + working hours

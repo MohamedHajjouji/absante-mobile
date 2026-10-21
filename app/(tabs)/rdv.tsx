@@ -16,8 +16,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { Redirect } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { useLanguage } from '@/lib/i18n/language-context';
 import { StatusChip } from '@/components/ui/StatusChip';
 import {
   getPatientByProfileId,
@@ -29,21 +30,21 @@ import {
   AppointmentReview,
 } from '@/lib/services/patient-service';
 
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+function formatTime(iso: string, tag: string) {
+  return new Date(iso).toLocaleTimeString(tag, { hour: '2-digit', minute: '2-digit' });
 }
 
-function formatDateTime(iso: string) {
+function formatDateTime(iso: string, tag: string) {
   const d = new Date(iso);
-  return d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  return d.toLocaleDateString(tag, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 function formatDayNumber(iso: string) {
   return new Date(iso).getDate().toString();
 }
 
-function formatMonth(iso: string) {
-  return new Date(iso).toLocaleDateString('fr-FR', { month: 'short' }).replace('.', '');
+function formatMonth(iso: string, tag: string) {
+  return new Date(iso).toLocaleDateString(tag, { month: 'short' }).replace('.', '');
 }
 
 /** Star rating + comment for a completed appointment. Shown in the detail modal. */
@@ -61,6 +62,7 @@ function ReviewSection({
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [saving, setSaving] = useState(false);
+  const { t } = useLanguage();
 
   useEffect(() => {
     let active = true;
@@ -104,7 +106,7 @@ function ReviewSection({
               color="#F59E0B"
             />
           ))}
-          <Text className="ml-1 text-xs font-medium text-grayText">Votre avis</Text>
+          <Text className="ml-1 text-xs font-medium text-grayText">{t('rdv.reviewTitle')}</Text>
         </View>
         {!!existing.comment && (
           <Text className="mt-2 text-sm text-dark">{existing.comment}</Text>
@@ -126,11 +128,11 @@ function ReviewSection({
       if (result.success) {
         setExisting({ id: 'new', rating, comment: comment.trim() || null });
       } else {
-        Alert.alert('Erreur', result.error || "Impossible d'envoyer votre avis.");
+        Alert.alert(t('rdv.error'), result.error || t('rdv.reviewFail'));
       }
     } catch (e) {
       console.error('Failed to submit review:', e);
-      Alert.alert('Erreur', "Impossible d'envoyer votre avis. Vérifiez votre connexion.");
+      Alert.alert(t('rdv.error'), t('rdv.reviewFailNet'));
     } finally {
       setSaving(false);
     }
@@ -138,7 +140,7 @@ function ReviewSection({
 
   return (
     <View className="mt-5 rounded-panel border border-hairline bg-white p-4 shadow-panel">
-      <Text className="text-sm font-semibold text-dark">Noter cette consultation</Text>
+      <Text className="text-sm font-semibold text-dark">{t('rdv.reviewCta')}</Text>
       <View className="mt-3 flex-row items-center gap-1">
         {[1, 2, 3, 4, 5].map((s) => (
           <TouchableOpacity key={s} onPress={() => setRating(s)} activeOpacity={0.7}>
@@ -153,7 +155,7 @@ function ReviewSection({
       <TextInput
         value={comment}
         onChangeText={setComment}
-        placeholder="Partagez votre expérience (optionnel)..."
+        placeholder={t('rdv.reviewPh')}
         placeholderTextColor="#929292"
         multiline
         numberOfLines={3}
@@ -167,7 +169,7 @@ function ReviewSection({
         disabled={saving}
       >
         <Text className="text-center text-sm font-medium text-white">
-          {saving ? 'Envoi...' : 'Envoyer mon avis'}
+          {saving ? t('rdv.reviewSending') : t('rdv.reviewSend')}
         </Text>
       </TouchableOpacity>
     </View>
@@ -176,6 +178,8 @@ function ReviewSection({
 
 export default function AppointmentsScreen() {
   const { user, isLoaded } = useAuth();
+  const { t, localeTag } = useLanguage();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming');
   const [appointments, setAppointments] = useState<PatientAppointment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -215,10 +219,10 @@ export default function AppointmentsScreen() {
 
   const handleCancel = async (appt: PatientAppointment) => {
     if (!patientId) return;
-    Alert.alert('Annuler le rendez-vous', `Voulez-vous vraiment annuler avec ${appt.providerName} ?`, [
-      { text: 'Non', style: 'cancel' },
+    Alert.alert(t('rdv.cancelTitle'), t('rdv.cancelBody', { name: appt.providerName }), [
+      { text: t('rdv.cancelNo'), style: 'cancel' },
       {
-        text: 'Oui, annuler', style: 'destructive',
+        text: t('rdv.cancelYes'), style: 'destructive',
         onPress: async () => {
           setBusy(true);
           try {
@@ -227,11 +231,11 @@ export default function AppointmentsScreen() {
               setSelected(null);
               setAppointments((prev) => prev.map((a) => a.id === appt.id ? { ...a, status: 'cancelled' } : a));
             } else {
-              Alert.alert('Erreur', result.error || "Impossible d'annuler.");
+              Alert.alert(t('rdv.error'), result.error || t('rdv.cancelFail'));
             }
           } catch (e) {
             console.error('Failed to cancel appointment:', e);
-            Alert.alert('Erreur', "Impossible d'annuler. Vérifiez votre connexion.");
+            Alert.alert(t('rdv.error'), t('rdv.cancelFailNet'));
           } finally {
             setBusy(false);
           }
@@ -259,16 +263,16 @@ export default function AppointmentsScreen() {
         <View className="h-20 w-20 items-center justify-center rounded-full bg-primary-50">
           <Ionicons name="cloud-offline-outline" size={36} color="#F53E8A" />
         </View>
-        <Text className="mt-6 text-lg font-semibold text-dark">Connexion impossible</Text>
+        <Text className="mt-6 text-lg font-semibold text-dark">{t('rdv.offlineTitle')}</Text>
         <Text className="mt-2 text-center text-sm font-medium leading-6 text-grayText">
-          Vos rendez-vous n'ont pas pu être chargés. Vérifiez votre connexion puis réessayez.
+          {t('rdv.offlineBody')}
         </Text>
         <TouchableOpacity
           onPress={() => { setLoading(true); loadAppointments(); }}
           className="mt-6 rounded-full bg-primary px-8 py-3"
           activeOpacity={0.85}
         >
-          <Text className="text-sm font-semibold text-white">Réessayer</Text>
+          <Text className="text-sm font-semibold text-white">{t('rdv.retry')}</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -284,8 +288,8 @@ export default function AppointmentsScreen() {
       >
         {/* Header */}
         <Animated.View entering={FadeInDown.duration(450)} className="px-5 pt-4">
-          <Text className="text-2xl font-semibold tracking-[-0.3px] text-dark">Rendez-vous</Text>
-          <Text className="mt-1 text-sm font-medium text-grayText">Gérez vos rendez-vous médicaux</Text>
+          <Text className="text-2xl font-semibold tracking-[-0.3px] text-dark">{t('rdv.title')}</Text>
+          <Text className="mt-1 text-sm font-medium text-grayText">{t('rdv.subtitle')}</Text>
         </Animated.View>
 
         {/* Tabs */}
@@ -302,7 +306,7 @@ export default function AppointmentsScreen() {
                 accessibilityState={{ selected: active }}
               >
                 <Text className={`text-sm font-medium ${active ? 'text-dark' : 'text-grayText'}`}>
-                  {tab === 'upcoming' ? 'À venir' : 'Passés'}
+                  {tab === 'upcoming' ? t('rdv.upcoming') : t('rdv.past')}
                 </Text>
                 {count > 0 && (
                   <View className={`h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 ${active ? 'bg-primary' : 'bg-hairline'}`}>
@@ -338,13 +342,13 @@ export default function AppointmentsScreen() {
                           <View className="mt-4 flex-row items-center gap-4">
                             <View className="h-12 w-12 items-center justify-center rounded-full border border-hairline bg-white">
                               <Text className="text-sm font-semibold text-primary">{formatDayNumber(appt.startsAt)}</Text>
-                              <Text className="text-[10px] font-medium uppercase text-grayText">{formatMonth(appt.startsAt)}</Text>
+                              <Text className="text-[10px] font-medium uppercase text-grayText">{formatMonth(appt.startsAt, localeTag)}</Text>
                             </View>
                             <View className="flex-1 gap-1">
                               <View className="flex-row items-center gap-1.5">
                                 <Ionicons name="time-outline" size={14} color="#3D4B64" />
                                 <Text className="text-sm font-semibold text-dark">
-                                  {formatTime(appt.startsAt)} – {formatTime(appt.endsAt)}
+                                  {formatTime(appt.startsAt, localeTag)} – {formatTime(appt.endsAt, localeTag)}
                                 </Text>
                                 {appt.price != null && (
                                   <Text className="ml-auto text-sm font-medium text-grayText">{appt.price} MAD</Text>
@@ -372,16 +376,16 @@ export default function AppointmentsScreen() {
                           <TouchableOpacity
                             className="flex-1 rounded-lg border border-hairline bg-white py-2.5"
                             activeOpacity={0.7}
-                            onPress={() => Alert.alert('Reporter', 'La fonctionnalité de report sera bientôt disponible.')}
+                            onPress={() => setSelected(appt)}
                           >
-                            <Text className="text-center text-xs font-medium text-dark">Reporter</Text>
+                            <Text className="text-center text-xs font-medium text-dark">{t('rdv.details')}</Text>
                           </TouchableOpacity>
                           <TouchableOpacity
                             className="flex-1 rounded-lg bg-primary py-2.5"
                             activeOpacity={0.8}
                             onPress={() => handleCancel(appt)}
                           >
-                            <Text className="text-center text-xs font-medium text-white">Annuler</Text>
+                            <Text className="text-center text-xs font-medium text-white">{t('rdv.cancel')}</Text>
                           </TouchableOpacity>
                         </View>
                       )}
@@ -396,12 +400,12 @@ export default function AppointmentsScreen() {
                 <Ionicons name="calendar" size={36} color="#F53E8A" />
               </View>
               <Text className="mt-6 text-lg font-semibold text-dark">
-                {activeTab === 'upcoming' ? 'Aucun rendez-vous à venir' : 'Aucun rendez-vous passé'}
+                {activeTab === 'upcoming' ? t('rdv.emptyUpcoming') : t('rdv.emptyPast')}
               </Text>
               <Text className="mt-2 text-center text-sm font-medium leading-6 text-grayText">
                 {activeTab === 'upcoming'
-                  ? 'Prenez rendez-vous avec un professionnel de santé.'
-                  : 'Vos rendez-vous passés apparaîtront ici.'}
+                  ? t('rdv.emptyUpcomingBody')
+                  : t('rdv.emptyPastBody')}
               </Text>
             </View>
           )}
@@ -416,11 +420,11 @@ export default function AppointmentsScreen() {
               <View className="flex-row items-start justify-between">
                 <View className="flex-1 pr-3">
                   <Text className="text-[22px] font-medium leading-[26px] tracking-[-0.44px] text-dark">
-                    Détails du rendez-vous
+                    {t('rdv.details')}
                   </Text>
                   <View className="mt-1 flex-row items-center gap-1.5">
                     <Ionicons name="calendar-outline" size={13} color="#929292" />
-                    <Text className="text-xs font-medium text-grayText">{formatDateTime(selected.startsAt)}</Text>
+                    <Text className="text-xs font-medium text-grayText">{formatDateTime(selected.startsAt, localeTag)}</Text>
                   </View>
                 </View>
                 <TouchableOpacity
@@ -434,8 +438,8 @@ export default function AppointmentsScreen() {
               <View className="mt-5 overflow-hidden rounded-panel border border-hairline bg-white shadow-panel">
                 <View className="flex-row items-center p-4">
                   <View className="h-12 w-12 items-center justify-center rounded-full border border-hairline bg-white">
-                    <Text className="text-sm font-semibold text-primary">{formatDayNumber(selected.startsAt)}</Text>
-                    <Text className="text-[10px] font-medium uppercase text-grayText">{formatMonth(selected.startsAt)}</Text>
+                      <Text className="text-sm font-semibold text-primary">{formatDayNumber(selected.startsAt)}</Text>
+                      <Text className="text-[10px] font-medium uppercase text-grayText">{formatMonth(selected.startsAt, localeTag)}</Text>
                   </View>
                   <View className="ml-3 flex-1">
                     <Text className="text-base font-semibold text-dark">{selected.providerName}</Text>
@@ -443,30 +447,30 @@ export default function AppointmentsScreen() {
                   </View>
                   <StatusChip status={selected.status} />
                 </View>
-                <View className="border-t border-hairline p-4">
-                  <View className="flex-row items-center justify-between py-1">
-                    <Text className="text-sm font-medium text-grayText">Heure</Text>
-                    <Text className="text-sm font-semibold text-dark">{formatTime(selected.startsAt)} – {formatTime(selected.endsAt)}</Text>
-                  </View>
-                  <View className="flex-row items-center justify-between py-1">
-                    <Text className="text-sm font-medium text-grayText">Service</Text>
-                    <Text className="text-sm font-semibold text-dark">{selected.serviceName}</Text>
-                  </View>
-                  {selected.price != null && (
+                  <View className="border-t border-hairline p-4">
                     <View className="flex-row items-center justify-between py-1">
-                      <Text className="text-sm font-medium text-grayText">Prix</Text>
-                      <Text className="text-sm font-semibold text-dark">{selected.price} MAD</Text>
+                      <Text className="text-sm font-medium text-grayText">{t('rdv.time')}</Text>
+                      <Text className="text-sm font-semibold text-dark">{formatTime(selected.startsAt, localeTag)} – {formatTime(selected.endsAt, localeTag)}</Text>
                     </View>
-                  )}
-                  {selected.facilityName && (
                     <View className="flex-row items-center justify-between py-1">
-                      <Text className="text-sm font-medium text-grayText">Lieu</Text>
-                      <Text className="text-sm font-semibold text-dark">{selected.facilityName}</Text>
+                      <Text className="text-sm font-medium text-grayText">{t('rdv.service')}</Text>
+                      <Text className="text-sm font-semibold text-dark">{selected.serviceName}</Text>
                     </View>
-                  )}
-                  {selected.patientNotes && (
-                    <View className="py-1">
-                      <Text className="text-sm font-medium text-grayText">Notes</Text>
+                    {selected.price != null && (
+                      <View className="flex-row items-center justify-between py-1">
+                        <Text className="text-sm font-medium text-grayText">{t('rdv.price')}</Text>
+                        <Text className="text-sm font-semibold text-dark">{selected.price} MAD</Text>
+                      </View>
+                    )}
+                    {selected.facilityName && (
+                      <View className="flex-row items-center justify-between py-1">
+                        <Text className="text-sm font-medium text-grayText">{t('rdv.place')}</Text>
+                        <Text className="text-sm font-semibold text-dark">{selected.facilityName}</Text>
+                      </View>
+                    )}
+                    {selected.patientNotes && (
+                      <View className="py-1">
+                        <Text className="text-sm font-medium text-grayText">{t('rdv.notes')}</Text>
                       <Text className="mt-1 text-sm font-medium text-dark">{selected.patientNotes}</Text>
                     </View>
                   )}
@@ -474,25 +478,31 @@ export default function AppointmentsScreen() {
               </View>
 
               {selected.status !== 'cancelled' && selected.status !== 'completed' && (
-                <View className="mt-5 flex-row gap-2">
-                  <TouchableOpacity
-                    className="flex-1 rounded-lg border border-red-200 bg-white py-3"
-                    activeOpacity={0.8}
-                    onPress={() => handleCancel(selected)}
-                    disabled={busy}
-                  >
-                    <Text className="text-center text-sm font-medium text-red-500">Annuler</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    className="flex-1 rounded-lg bg-primary py-3"
-                    activeOpacity={0.8}
-                    onPress={() => {
-                      setSelected(null);
-                      Alert.alert('Reporter', 'La fonctionnalité de report sera bientôt disponible.');
-                    }}
-                  >
-                    <Text className="text-center text-sm font-medium text-white">Reporter</Text>
-                  </TouchableOpacity>
+                <View className="mt-5 gap-2">
+                  <View className="flex-row gap-2">
+                    <TouchableOpacity
+                      className="flex-1 rounded-lg border border-red-200 bg-white py-3"
+                      activeOpacity={0.8}
+                      onPress={() => handleCancel(selected)}
+                      disabled={busy}
+                    >
+                      <Text className="text-center text-sm font-medium text-red-500">{t('rdv.cancel')}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      className="flex-1 rounded-lg bg-primary py-3"
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        const appt = selected;
+                        setSelected(null);
+                        router.push('/(tabs)/search');
+                      }}
+                    >
+                      <Text className="text-center text-sm font-medium text-white">{t('rdv.rebook')}</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Text className="text-center text-xs leading-4 text-grayText">
+                    {t('rdv.rebookHint')}
+                  </Text>
                 </View>
               )}
 

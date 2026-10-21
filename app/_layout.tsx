@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from '@/lib/contexts/AuthContext';
+import { LanguageProvider } from '@/lib/i18n/language-context';
 import './global.css';
 
 export default function RootLayout() {
@@ -10,9 +11,11 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <StatusBar style="dark" />
-        <AuthProvider>
-          <RootContent />
-        </AuthProvider>
+        <LanguageProvider>
+          <AuthProvider>
+            <RootContent />
+          </AuthProvider>
+        </LanguageProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
@@ -36,6 +39,8 @@ function RootContent() {
       <Stack.Screen name="(erp)" />
       <Stack.Screen name="doctor/[id]" />
       <Stack.Screen name="booking/[providerId]" />
+      <Stack.Screen name="professionals" />
+      <Stack.Screen name="affiches" />
       <Stack.Screen name="+not-found" />
     </Stack>
   );

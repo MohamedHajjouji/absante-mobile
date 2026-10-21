@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Image } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -9,7 +9,9 @@ import {
   ProviderDetail,
   ProviderServiceItem,
 } from '@/lib/services/patient-service';
+import { useLanguage } from '@/lib/i18n/language-context';
 import { DoctorMap } from '@/components/map/DoctorMap';
+import { MapModal } from '@/components/map/MapModal';
 
 const SPECIALTY_META: Record<string, { icon: keyof typeof Ionicons.glyphMap; color: string; bg: string }> = {
   Cardiologue: { icon: 'heart', color: '#F53E8A', bg: '#fdf2f8' },
@@ -24,26 +26,28 @@ function getMeta(specialty: string) {
   return SPECIALTY_META[specialty] ?? { icon: 'medkit' as const, color: '#0D61B6', bg: '#ecf2fa' };
 }
 
-const SERVICE_TYPE_LABELS: Record<string, string> = {
-  consultation: 'Consultation',
-  treatment: 'Traitement',
-  examination: 'Examen',
-  laboratory: 'Laboratoire',
-  radiology: 'Radiologie',
-  vaccination: 'Vaccination',
-  other: 'Autre',
-};
-
 export default function DoctorDetailScreen() {
   const rawParams = useLocalSearchParams<{ id: string }>();
   const rawId = rawParams.id;
   const id = Array.isArray(rawId) ? rawId[0] : rawId;
   const router = useRouter();
+  const { t } = useLanguage();
+
+  const SERVICE_TYPE_LABELS: Record<string, string> = {
+    consultation: t('doctor.type.consultation'),
+    treatment: t('doctor.type.treatment'),
+    examination: t('doctor.type.examination'),
+    laboratory: t('doctor.type.laboratory'),
+    radiology: t('doctor.type.radiology'),
+    vaccination: t('doctor.type.vaccination'),
+    other: t('doctor.type.other'),
+  };
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [provider, setProvider] = useState<ProviderDetail | null>(null);
   const [services, setServices] = useState<ProviderServiceItem[]>([]);
+  const [mapOpen, setMapOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) {
@@ -84,16 +88,16 @@ export default function DoctorDetailScreen() {
       <SafeAreaView className="flex-1 items-center justify-center bg-pageBg px-8">
         <Ionicons name="cloud-offline-outline" size={48} color="#F53E8A" />
         <Text className="mt-4 text-base font-semibold text-dark">
-          Connexion impossible
+          {t('doctor.offlineTitle')}
         </Text>
         <Text className="mt-2 text-center text-sm text-grayText">
-          Le profil du médecin n'a pas pu être chargé.
+          {t('doctor.offlineBody')}
         </Text>
         <TouchableOpacity
           onPress={load}
           className="mt-6 rounded-lg bg-primary px-6 py-3"
         >
-          <Text className="text-sm font-medium text-white">Réessayer</Text>
+          <Text className="text-sm font-medium text-white">{t('doctor.retry')}</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -104,13 +108,13 @@ export default function DoctorDetailScreen() {
       <SafeAreaView className="flex-1 items-center justify-center bg-pageBg">
         <Ionicons name="alert-circle-outline" size={48} color="#929292" />
         <Text className="mt-4 text-base font-medium text-grayText">
-          Médecin introuvable
+          {t('doctor.notFound')}
         </Text>
         <TouchableOpacity
           onPress={() => router.back()}
           className="mt-6 rounded-lg bg-primary px-6 py-3"
         >
-          <Text className="text-sm font-medium text-white">Retour</Text>
+          <Text className="text-sm font-medium text-white">{t('doctor.back')}</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -134,7 +138,7 @@ export default function DoctorDetailScreen() {
           >
             <Ionicons name="chevron-back" size={22} color="#3D4B64" />
           </TouchableOpacity>
-          <Text className="text-base font-semibold text-dark">Profil médecin</Text>
+          <Text className="text-base font-semibold text-dark">{t('doctor.title')}</Text>
           <View className="h-11 w-11" />
         </View>
 
@@ -144,7 +148,7 @@ export default function DoctorDetailScreen() {
             <Image
               source={{ uri: provider.avatarUrl }}
               className="h-24 w-24 rounded-full"
-              accessibilityLabel={`Photo de Dr ${provider.firstName} ${provider.lastName}`}
+              accessibilityLabel={t('doctor.photoAlt', { name: `${provider.firstName} ${provider.lastName}` })}
             />
           ) : (
             <View
@@ -176,7 +180,7 @@ export default function DoctorDetailScreen() {
               color={provider.isRegistered ? '#0D61B6' : '#B7791F'}
             />
             <Text className="text-xs font-medium text-secondary-tone">
-              {provider.isRegistered ? 'Médecin vérifié' : 'Profil non revendiqué'}
+              {provider.isRegistered ? t('doctor.verified') : t('doctor.unclaimed')}
             </Text>
           </View>
         </View>
@@ -188,11 +192,10 @@ export default function DoctorDetailScreen() {
               <Ionicons name="checkmark-circle-outline" size={20} color="#B7791F" />
               <View className="flex-1">
                 <Text className="text-sm font-semibold text-dark">
-                  C&apos;est vous, Dr {provider.firstName} {provider.lastName} ?
+                  {t('doctor.claimTitle', { name: `${provider.firstName} ${provider.lastName}` })}
                 </Text>
                 <Text className="mt-1 text-xs leading-4 text-grayText">
-                  Revendiquez ce profil pour corriger vos informations et activer la
-                  réservation en ligne.
+                  {t('doctor.claimBody')}
                 </Text>
               </View>
             </View>
@@ -201,10 +204,10 @@ export default function DoctorDetailScreen() {
               activeOpacity={0.8}
               onPress={() => router.push('/(onboarding)/professional')}
               accessibilityRole="button"
-              accessibilityLabel="Revendiquer ce profil professionnel"
+              accessibilityLabel={t('doctor.claimA11y')}
             >
               <Text className="text-center text-sm font-semibold text-white">
-                Revendiquer ce profil
+                {t('doctor.claimCta')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -221,7 +224,7 @@ export default function DoctorDetailScreen() {
               ).toFixed(1)}
             </Text>
             <Text className="text-xs text-grayText">
-              {provider.reviewCount} avis
+              {t('doctor.reviews', { n: provider.reviewCount })}
             </Text>
           </View>
           <View className="flex-1 items-center rounded-panel border border-hairline bg-white p-4 shadow-panel">
@@ -229,14 +232,14 @@ export default function DoctorDetailScreen() {
             <Text className="mt-1.5 text-lg font-semibold text-dark">
               {provider.yearsOfExperience ?? '—'}
             </Text>
-            <Text className="text-xs text-grayText">Années exp.</Text>
+            <Text className="text-xs text-grayText">{t('doctor.yearsExp')}</Text>
           </View>
           <View className="flex-1 items-center rounded-panel border border-hairline bg-white p-4 shadow-panel">
             <Ionicons name="location-outline" size={20} color="#F53E8A" />
             <Text className="mt-1.5 text-sm font-semibold text-dark" numberOfLines={1}>
               {provider.city ?? '—'}
             </Text>
-            <Text className="text-xs text-grayText">Ville</Text>
+            <Text className="text-xs text-grayText">{t('doctor.city')}</Text>
           </View>
         </View>
 
@@ -244,7 +247,7 @@ export default function DoctorDetailScreen() {
         {provider.biography ? (
           <View className="mx-5 mt-6">
             <Text className="text-[18px] font-medium tracking-[-0.3px] text-dark">
-              À propos
+              {t('doctor.about')}
             </Text>
             <Text className="mt-3 text-sm leading-5 text-grayText">
               {provider.biography}
@@ -256,10 +259,11 @@ export default function DoctorDetailScreen() {
         {(provider.facilities ?? []).length > 0 ? (
           <View className="mx-5 mt-6">
             <Text className="text-[18px] font-medium tracking-[-0.3px] text-dark">
-              Lieux de consultation
+              {t('doctor.places')}
             </Text>
             {(provider.facilities ?? []).some((f) => f.lat != null && f.lng != null) ? (
               <View className="mt-3 overflow-hidden rounded-panel border border-hairline">
+                {/* Static preview — gestures off so the page scroll still works; tap opens the full-screen map */}
                 <DoctorMap
                   key={(provider.facilities ?? [])
                     .filter((f) => f.lat != null && f.lng != null)
@@ -274,6 +278,8 @@ export default function DoctorDetailScreen() {
                       description: f.city || undefined,
                     }))}
                   height={220}
+                  preview
+                  onOpen={() => setMapOpen(true)}
                 />
               </View>
             ) : null}
@@ -299,7 +305,7 @@ export default function DoctorDetailScreen() {
         {/* Services */}
         <View className="mx-5 mt-6">
           <Text className="text-[18px] font-medium tracking-[-0.3px] text-dark">
-            Services & tarifs
+            {t('doctor.services')}
           </Text>
           {services.length > 0 ? (
             <View className="mt-3 gap-3">
@@ -322,7 +328,7 @@ export default function DoctorDetailScreen() {
                         <View className="flex-row items-center gap-1">
                           <Ionicons name="time-outline" size={13} color="#929292" />
                           <Text className="text-xs text-grayText">
-                            {s.durationMinutes} min
+                            {s.durationMinutes} {t('doctor.min')}
                           </Text>
                         </View>
                         <View className="flex-row items-center gap-1">
@@ -342,47 +348,70 @@ export default function DoctorDetailScreen() {
                       </Text>
                     </View>
                   </View>
-                  <TouchableOpacity
-                    className={
-                      provider.isRegistered
-                        ? 'mt-3 rounded-lg bg-primary py-2.5'
-                        : 'mt-3 rounded-lg bg-slate-200 py-2.5'
-                    }
-                    activeOpacity={0.8}
-                    onPress={() => {
-                      if (!provider.isRegistered) {
-                        Alert.alert(
-                          'Réservation bientôt disponible',
-                          "Ce praticien n'a pas encore activé la réservation en ligne."
-                        );
-                        return;
-                      }
-                      router.push(`/booking/${provider.id}?serviceId=${s.id}`);
-                    }}
-                  >
-                    <Text
-                      className={
-                        provider.isRegistered
-                          ? 'text-center text-sm font-medium text-white'
-                          : 'text-center text-sm font-medium text-grayText'
-                      }
+                  {provider.isRegistered ? (
+                    <TouchableOpacity
+                      className="mt-3 rounded-lg bg-primary py-2.5"
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        router.push(`/booking/${provider.id}?serviceId=${s.id}`);
+                      }}
                     >
-                      Réserver
-                    </Text>
-                  </TouchableOpacity>
+                      <Text className="text-center text-sm font-medium text-white">
+                        {t('doctor.book')}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View className="mt-3 rounded-lg bg-amber-50 px-3 py-2.5" style={{ borderWidth: 1, borderColor: '#FDE68A' }}>
+                      <Text className="text-center text-xs leading-4 text-grayText">
+                        {t('doctor.bookSoonBody')}
+                      </Text>
+                    </View>
+                  )}
                 </View>
               ))}
             </View>
           ) : (
             <View className="mt-4 items-center rounded-panel border border-hairline bg-white p-6">
               <Ionicons name="information-circle-outline" size={32} color="#929292" />
-              <Text className="mt-2 text-sm text-grayText">
-                Aucun service disponible pour le moment
+              <Text className="mt-2 text-center text-sm text-grayText">
+                {!provider.isRegistered
+                  ? t('doctor.bookSoonBody')
+                  : t('doctor.noServices')}
               </Text>
+              {!provider.isRegistered ? (
+                <TouchableOpacity
+                  className="mt-4 rounded-lg bg-primary px-6 py-3"
+                  activeOpacity={0.8}
+                  onPress={() => router.push('/(tabs)/search')}
+                >
+                  <Text className="text-center text-sm font-medium text-white">
+                    {t('doctor.findOther')}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           )}
         </View>
       </ScrollView>
+
+      {/* Full-screen interactive map (opened from the facilities preview) */}
+      <MapModal visible={mapOpen} title={t('doctor.places')} onClose={() => setMapOpen(false)}>
+        <DoctorMap
+          key={`modal-${(provider?.facilities ?? [])
+            .filter((f) => f.lat != null && f.lng != null)
+            .map((f) => f.id)
+            .join(',')}`}
+          pins={(provider?.facilities ?? [])
+            .filter((f) => f.lat != null && f.lng != null)
+            .map((f) => ({
+              lat: f.lat as number,
+              lng: f.lng as number,
+              title: f.name,
+              description: f.city || undefined,
+            }))}
+          full
+        />
+      </MapModal>
     </SafeAreaView>
   );
 }
