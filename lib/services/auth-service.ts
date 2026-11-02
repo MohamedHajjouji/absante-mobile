@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
@@ -7,11 +8,20 @@ import * as WebBrowser from 'expo-web-browser';
 /**
  * Build the redirect URI that Supabase will send the user back to
  * after the OAuth provider authenticates them.
- * The URI uses the app's custom scheme (configured in app.json as "absante").
+ * Native uses the app's custom scheme (configured in app.json as "absante").
  */
 function getRedirectUrl(): string {
   // expo-router's makeRedirectUri is ideal but requires router context;
   // Linking.createURL works anywhere and produces e.g. absante://auth/callback
+  //
+  // Web (PWA): per the SDK 57 Linking docs, createURL returns an absolute
+  // same-origin URL ("Web (prod): https://myapp.com/path"). The path must be
+  // the real route that exists (`/callback`, i.e. app/(auth)/callback.tsx) —
+  // OAuth redirects, email confirmation and password-reset links all land
+  // there. Native keeps its custom-scheme URL byte-for-byte unchanged.
+  if (Platform.OS === 'web') {
+    return Linking.createURL('callback');
+  }
   return Linking.createURL('auth/callback');
 }
 
@@ -89,6 +99,12 @@ export async function signInWithGoogle() {
     provider: 'google',
     options: {
       redirectTo: redirectUrl,
+      // Web: supabase-js would otherwise `window.location.assign()` the
+      // provider URL itself (auth-js `_handleProviderSignIn`), racing our own
+      // openAuthSessionAsync below. skipBrowserRedirect keeps the popup flow
+      // identical to native. Native: isBrowser() is false there, so this flag
+      // changes nothing.
+      skipBrowserRedirect: Platform.OS === 'web',
       queryParams: {
         access_type: 'offline',
         prompt: 'consent',
@@ -100,10 +116,37 @@ export async function signInWithGoogle() {
 
   if (data?.url) {
     // Open the Google consent screen inside a controlled browser session.
-    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+    // On web this must follow the user's tap as closely as possible: mobile
+    // browsers throw ERR_WEB_BROWSER_BLOCKED if window.open() fires after a
+    // long task (SDK 57 WebBrowser docs).
+    let result: Awaited<ReturnType<typeof WebBrowser.openAuthSessionAsync>>;
+    try {
+      result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+    } catch (e) {
+      if (Platform.OS === 'web') {
+        // Popup blocked (common on mobile browsers / installed PWAs) →
+        // full-page redirect instead. The /callback route completes the
+        // session on return via supabase-js's detectSessionInUrl.
+        window.location.assign(data.url);
+        return { success: true as const };
+      }
+      throw e;
+    }
 
     if (result.type === 'success' && result.url) {
-      await processOAuthCallback(result.url);
+      const processed = await processOAuthCallback(result.url);
+      // Web only: when the popup consumed the tokens itself, the session
+      // lives in shared localStorage but supabase-js has no cross-tab
+      // storage events — so re-establish it here to notify AuthContext.
+      if (!processed && Platform.OS === 'web') {
+        const { data: current } = await supabase.auth.getSession();
+        if (current.session) {
+          await supabase.auth.setSession({
+            access_token: current.session.access_token,
+            refresh_token: current.session.refresh_token,
+          });
+        }
+      }
       return { success: true as const };
     }
   }

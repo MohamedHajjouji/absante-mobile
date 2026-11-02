@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
-import { View, Text } from 'react-native';
+import { Platform, View, Text } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -21,6 +22,23 @@ export default function AuthCallback() {
   const searchParams = useLocalSearchParams();
 
   useEffect(() => {
+    // Web OAuth popup handshake (SDK 57 expo-web-browser): post this page's
+    // final URL to the opener window so its openAuthSessionAsync() resolves
+    // with the tokens, then the opener closes this popup. Returns "failed"
+    // harmlessly on direct visits (email confirmation / password-reset links
+    // have no opener session). Platform-guarded so the native path is
+    // byte-for-byte identical — native resolves the session in the opener
+    // via the app scheme instead.
+    if (Platform.OS === 'web') {
+      try {
+        WebBrowser.maybeCompleteAuthSession();
+      } catch (e) {
+        // e.g. ERR_WEB_BROWSER_REDIRECT when the opener was reloaded —
+        // the parent falls back to its own token handling.
+        console.warn('Web auth handshake not completed:', e);
+      }
+    }
+
     const handleCallback = async () => {
       try {
         // 1. Try to extract auth tokens from the URL hash (OAuth implicit flow)

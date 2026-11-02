@@ -10,11 +10,12 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.absante.absante",
-      "buildNumber": "4",
+      "buildNumber": "6",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "AB Santé utilise votre galerie pour ajouter votre photo de profil et joindre des documents (ordonnances, factures).",
         "NSCameraUsageDescription": "AB Santé utilise votre appareil photo pour photographier des documents (ordonnances, reçus) à joindre à votre dossier.",
+        "NSLocationWhenInUseUsageDescription": "AB Santé peut utiliser votre position pour afficher votre point sur la carte et vous aider à trouver les professionnels de santé les plus proches.",
         "CFBundleLocalizations": ["fr", "en"]
       }
     },
@@ -29,7 +30,8 @@
     },
     "web": {
       "bundler": "metro",
-      "output": "static"
+      "output": "single",
+      "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-router",
